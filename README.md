@@ -82,37 +82,53 @@ This is an **automated stock trading assistant** that:
 
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
 
-Press Enter and wait
-Then type:
+3. Press Enter and wait
+4. Then type:
+
+```bash
 brew install python
-Verify Installation
-Open Command Prompt (Windows) or Terminal (Mac) and type:
+```
+5. Verify Installation
 
+Open Command Prompt (Windows) or Terminal (Mac) and type:
+```bash
 python --version
+```
 You should see something like Python 3.11.5
 
-Step 2: Download the Trading System
-Option A: Download ZIP (Easiest)
-Download the trading system ZIP file
-Extract it to a folder:
-Windows: C:\trading_system
-Mac/Linux: ~/trading_system
-Option B: Create Using Setup Script
-Create a new folder called trading_system
-Save the setup script as setup_trading_system.py in that folder
-Open Command Prompt/Terminal
-Navigate to the folder:
+### Step 2: Download the Trading System
+
+#### Option A: Download ZIP (Easiest)
+
+1. Download the trading system ZIP file
+2. Extract it to a folder:
+   - Windows: C:\trading_system
+   - Mac/Linux: ~/trading_system
+
+####  Option B: Create Using Setup Script
+1. Create a new folder called trading_system
+2. Save the setup script as setup_trading_system.py in that folder
+3. Open Command Prompt/Terminal
+4. Navigate to the folder:
+
+```bash
 # Windows
 cd C:\trading_system
 
 # Mac/Linux
 cd ~/trading_system
-Run the setup:
+```
+5. Run the setup:
+```bash
 python setup_trading_system.py
-Step 3: Install Required Components
-Open Command Prompt (Windows) or Terminal (Mac):
+```
+### Step 3: Install Required Components
 
+#### Open Command Prompt (Windows) or Terminal (Mac):
+
+```bash
 # Navigate to trading system folder
 # Windows:
 cd C:\trading_system
@@ -122,20 +138,25 @@ cd ~/trading_system
 
 # Install all required components (takes 2-5 minutes)
 pip install -r requirements.txt
+```
+
 You'll see a lot of text scrolling. Wait until you see the command prompt again.
 
-Step 4: Test the Installation
+###  Step 4: Test the Installation
+```bash
 python main.py signals
+```
 If you see stock signals appearing, congratulations! Installation is complete! 🎉
 
-🚀 Quick Start (5 Minutes)
-Your First Signal
+###  🚀 Quick Start (5 Minutes)
+#### Your First Signal
 Open Command Prompt/Terminal and type:
-
+```bash
 cd C:\trading_system
 python main.py signals
-What you'll see:
-
+```
+####  What you'll see:
+```bash
 🎯 Swing Trading System - 2026-05-15 09:00
 Account Size: $50,000 | Target: 4.0%/month
 
@@ -172,35 +193,22 @@ Score: 75/100
 
 📈 RISK/REWARD:
    R:R: 2.0 (You risk $1 to make $2)
-What This Means
-Term	Meaning
-STRONG BUY	High confidence signal - consider trading
-Entry: $235.00	Buy the stock at this price
-Stop Loss: $223.00	Sell immediately if price drops here (limits your loss)
-Target 1: $259.00	Sell half your shares here for profit
-Target 2: $275.00	Sell remaining shares here for more profit
-R:R: 2.0	Risk/Reward ratio - you risk
-1
-t
-o
-p
-o
-t
-e
-n
-t
-i
-a
-l
-l
-y
-m
-a
-k
-e
-1topotentiallymake2
-📅 Daily Trading Workflow
-Your Daily Schedule
+
+```
+#### What This Means
+| Term              | Meaning                                                   |
+|-------------------|-----------------------------------------------------------|
+| STRONG BUY        | High confidence signal - consider trading                 |
+| Entry: $235.00    | Buy the stock at this price                               |
+| Stop Loss: $223.00| Sell immediately if price drops here (limits your loss)   |
+| Target 1: $259.00 | Sell half your shares here for profit                     |
+| Target 2: $275.00 | Sell remaining shares here for more profit                |
+| R:R: 2.0          | Risk/Reward ratio - you risk $1 to potentially make $2    |
+
+
+### 📅 Daily Trading Workflow
+#### Your Daily Schedule
+```bash
 ┌──────────────────────────────────────────────────────────────┐
 │                    DAILY TRADING ROUTINE                     │
 ├──────────────────────────────────────────────────────────────┤
@@ -241,8 +249,11 @@ Your Daily Schedule
 │   └────────────────────────────────────────────────────────┘ │
 │                                                              │
 └──────────────────────────────────────────────────────────────┘
-📖 All Commands Explained
-Command Reference Card
+```
+### 📖 All Commands Explained
+#### Command Reference Card
+
+```bash
 ╔══════════════════════════════════════════════════════════════════╗
 ║                    TRADING SYSTEM COMMANDS                       ║
 ╠══════════════════════════════════════════════════════════════════╣
@@ -293,7 +304,10 @@ Command Reference Card
 ║      → Then go to: http://localhost:8501                         ║
 ║                                                                  ║
 ╚══════════════════════════════════════════════════════════════════╝
-Detailed Command Explanations
+```
+
+#### Detailed Command Explanations
+
 1. python main.py signals
 What it does: Scans all stocks and shows you which ones to buy today.
 
@@ -301,10 +315,13 @@ When to use: Every morning before market opens (9:30 AM).
 
 Example output:
 
+```bash
 🎯 STRONG BUY: NVDA
    Entry: $235.00
    Stop: $223.00
    Target: $259.00
+```
+
 2. python main.py analyze -s NVDA
 What it does: Gives detailed analysis of one specific stock.
 
@@ -312,9 +329,12 @@ When to use: When you want more details about a stock.
 
 Examples:
 
+```bash
 python main.py analyze -s AAPL
 python main.py analyze -s TSLA
 python main.py analyze -s MSFT
+```
+
 3. python main.py quick-update
 What it does: Updates your stock list with the best performing stocks.
 
@@ -327,11 +347,14 @@ What it does: Opens a menu to log and track all your trades.
 
 Menu options:
 
+```bash
 1. Add New Trade      - Log when you buy a stock
 2. Close Trade        - Log when you sell a stock
 3. View Open Trades   - See your current positions
 4. View Statistics    - See your win rate and profits
 5. View All Trades    - See complete history
+
+```
 5. python run_dashboard.py
 What it does: Opens a visual website on your computer with charts and buttons.
 
@@ -341,14 +364,16 @@ Run the command
 Open your web browser
 Go to: http://localhost:8501
 Use the visual interface instead of typing commands
-🎯 Understanding the Signals
-Signal Types Explained
-Signal	Meaning	Action
+### 🎯 Understanding the Signals
+#### Signal Types Explained
+#### Signal	Meaning	Action
 🟢 STRONG BUY	Excellent setup, high confidence	Consider trading
 🟡 BUY	Good setup, moderate confidence	Consider trading
 🟠 WATCH	Potential setup forming	Add to watchlist, wait
 🔴 AVOID	Poor setup or risky	Do not trade
+
 Reading a Signal
+```bash
 ==================================================
 🎯 STRONG BUY: NVDA
 ==================================================
@@ -371,46 +396,56 @@ Score: 75/100                   ← Confidence score (higher = better)
 
 📈 RISK/REWARD:
    R:R: 2.0                     ← Risk $1 to make $2
-What the Numbers Mean
-RSI (Relative Strength Index)
-Value	Meaning
-Below 30	Oversold (might bounce up)
-30-70	Normal range ✓
-Above 70	Overbought (might drop)
-Score (0-100)
-Score	Signal Quality
-70-100	Strong signal
-55-69	Good signal
-40-54	Weak signal
-Below 40	Avoid
-R:R (Risk/Reward Ratio)
-Ratio	Recommendation
-2.0 or higher	Good trade (make
-2
-f
-o
-r
-e
-v
-e
-r
-y
-2forevery1 risked)
-1.5-2.0	Acceptable
-Below 1.5	Not recommended
-💰 How to Place Trades
-Step-by-Step Guide (For Any Broker)
-When You Get a Signal
-Example Signal:
+```
 
+### What the Numbers Mean
+#### RSI (Relative Strength Index)
+
+| Value    | Meaning                   |
+|----------|---------------------------|
+| Below 30 | Oversold (might bounce up)|
+| 30-70    | Normal range ✓            |
+| Above 70 | Overbought (might drop)   |
+
+
+####  Score (0-100)
+
+| Score    | Signal Quality |
+|----------|----------------|
+| 70-100   | Strong signal  |
+| 55-69    | Good signal    |
+| 40-54    | Weak signal    |
+| Below 40 | Avoid          |
+
+
+#### R:R (Risk/Reward Ratio)
+
+| Ratio         | Recommendation                              |
+|---------------|---------------------------------------------|
+| 2.0 or higher | Good trade (make $2 for every $1 risked)    |
+| 1.5-2.0       | Acceptable                                  |
+| Below 1.5     | Not recommended                             |
+
+
+### 💰 How to Place Trades
+#### Step-by-Step Guide (For Any Broker)
+
+####  When You Get a Signal
+
+#### Example Signal:
+
+```bash
 NVDA
 Entry: $235.00
 Stop Loss: $223.00
 Target 1: $259.00
 Shares to buy: 62
-Step 1: Calculate Position Size
+```
+
+#### Step 1: Calculate Position Size
 The system tells you, but here's the formula:
 
+```bash
 Risk Amount = Account Size × 1.5%
             = $50,000 × 0.015
             = $750
@@ -422,35 +457,43 @@ Risk Per Share = Entry - Stop Loss
 Shares to Buy = Risk Amount ÷ Risk Per Share
               = $750 ÷ $12
               = 62 shares
-Step 2: Place Buy Order
-Log into your broker (TD Ameritrade, Fidelity, Schwab, etc.)
-Search for the stock symbol (e.g., NVDA)
-Click "Trade" or "Buy"
-Enter:
-Action: Buy
-Quantity: 62 shares
-Order Type: Limit
-Limit Price: $235.00
-Duration: Day (or GTC - Good Till Cancelled)
-Click "Review" then "Submit"
-Step 3: Set Stop Loss (IMPORTANT!)
+```
+
+#### Step 2: Place Buy Order
+1. Log into your broker (TD Ameritrade, Fidelity, Schwab, etc.)
+2. Search for the stock symbol (e.g., NVDA)
+3. Click "Trade" or "Buy"
+4. Enter:
+     - Action: Buy
+     - Quantity: 62 shares
+     - Order Type: Limit
+     - Limit Price: $235.00
+     - Duration: Day (or GTC - Good Till Cancelled)
+5. Click "Review" then "Submit"
+
+####  Step 3: Set Stop Loss (IMPORTANT!)
 Once your buy order fills:
 
-Click "Trade" or "Sell" on the same stock
-Enter:
-Action: Sell
-Quantity: 62 shares
-Order Type: Stop
-Stop Price: $223.00
-Duration: GTC (Good Till Cancelled)
-Click "Review" then "Submit"
-Step 4: Set Price Alert
+1. Click "Trade" or "Sell" on the same stock
+2. Enter:
+     - Action: Sell
+     - Quantity: 62 shares
+     - Order Type: Stop
+     - Stop Price: $223.00
+     - Duration: GTC (Good Till Cancelled)
+3. Click "Review" then "Submit"
+
+#### Step 4: Set Price Alert
+
 Most brokers let you set alerts:
 
-Go to "Alerts" or "Notifications"
-Set alert for NVDA at $259.00 (Target 1)
-Choose notification method (email/text)
-Order Types Explained
+1. Go to "Alerts" or "Notifications"
+2. Set alert for NVDA at $259.00 (Target 1)
+3. Choose notification method (email/text)
+
+#### Order Types Explained
+
+```bash
 ┌─────────────────────────────────────────────────────────────┐
 │                     ORDER TYPES EXPLAINED                   │
 ├─────────────────────────────────────────────────────────────┤
@@ -477,12 +520,16 @@ Order Types Explained
 │  Warning: Price might be different than expected            │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
-📊 Managing Your Trades
-Using the Trade Journal
-python trade_journal.py
-Adding a New Trade
-When you buy a stock:
+```
 
+### 📊 Managing Your Trades
+#### Using the Trade Journal
+```bash
+python trade_journal.py
+```
+#### Adding a New Trade
+When you buy a stock:
+```bash
 ==================================================
 ADD NEW TRADE
 ==================================================
@@ -496,9 +543,12 @@ Setup Type: PULLBACK
 Notes: Strong momentum, good volume
 
 ✓ Trade #1 added: 62 NVDA @ $235.00
-Closing a Trade
+```
+
+#### Closing a Trade
 When you sell:
 
+```bash
 ==================================================
 OPEN TRADES
 ==================================================
@@ -509,7 +559,10 @@ Enter Trade ID to close: 1
 Exit Price: $259.00
 
 WIN ✓: $1,488.00 (+10.21%)
-Viewing Your Statistics
+
+```
+#### Viewing Your Statistics
+```bash
 ==================================================
 TRADING STATISTICS
 ==================================================
@@ -522,132 +575,99 @@ Avg Win: $580.00
 Avg Loss: $310.00
 Profit Factor: 1.87
 ==================================================
-Trade Management Rules
-Rule 1: Always Use Stop Loss
-Never trade without a stop loss
-Set it immediately after your buy order fills
-Don't move it further away from your entry
-Rule 2: Take Profits in Stages
+```
+
+### Trade Management Rules
+#### Rule 1: Always Use Stop Loss
+-  Never trade without a stop loss
+- Set it immediately after your buy order fills
+- Don't move it further away from your entry
+
+#### Rule 2: Take Profits in Stages
 When price hits Target 1:
 
-Sell half your shares (31 out of 62)
-Move stop loss to breakeven (your entry price)
-Let the rest run to Target 2
-Rule 3: Don't Overtrade
-Maximum 8 positions at once
-Maximum 1.5% risk per trade
-Maximum 25% of account in one stock
-🌐 Using the Web Dashboard
-Starting the Dashboard
+1. Sell half your shares (31 out of 62)
+2. Move stop loss to breakeven (your entry price)
+3. Let the rest run to Target 2
+
+#### Rule 3: Don't Overtrade
+- Maximum 8 positions at once
+- Maximum 1.5% risk per trade
+- Maximum 25% of account in one stock
+
+### 🌐 Using the Web Dashboard
+#### Starting the Dashboard
+```bash
 python run_dashboard.py
+```
 Then open your browser and go to: http://localhost:8501
 
-Dashboard Pages
-Page	Purpose
-📊 Dashboard	Account overview, quick scan, market summary
-🔍 Scanner	Scan stocks with custom filters
-📈 Analysis	Detailed charts and analysis for any stock
-🎯 Signals	Generate trading signals
-📉 Backtest	Test strategy on historical data
-📐 Calculator	Calculate position size
-🔔 Setting Up Alerts
-Option 1: Telegram Alerts (Recommended)
+#### Dashboard Pages
+
+| Page           | Purpose                                      |
+|----------------|----------------------------------------------|
+| 📊 Dashboard   | Account overview, quick scan, market summary |
+| 🔍 Scanner     | Scan stocks with custom filters              |
+| 📈 Analysis    | Detailed charts and analysis for any stock   |
+| 🎯 Signals     | Generate trading signals                     |
+| 📉 Backtest    | Test strategy on historical data             |
+| 📐 Calculator  | Calculate position size                      |
+
+
+### 🔔 Setting Up Alerts
+#### Option 1: Telegram Alerts (Recommended)
+
 Step 1: Create a Telegram Bot
-Open Telegram app
-Search for @BotFather
-Send: /newbot
-Follow instructions to name your bot
-Copy the API Token (looks like: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz)
+   1. Open Telegram app
+   2. Search for @BotFather
+   3. Send: /newbot
+   4. Follow instructions to name your bot
+   5. Copy the API Token (looks like: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz)
+
 Step 2: Get Your Chat ID
-Search for @userinfobot in Telegram
-Send any message to it
-Copy your Chat ID (a number like 123456789)
+   - Search for @userinfobot in Telegram
+   - Send any message to it
+   - Copy your Chat ID (a number like 123456789)
+
 Step 3: Configure the System
-Open the file .env in your trading_system folder
-Add these lines:
+
+1. Open the file .env in your trading_system folder
+2. Add these lines:
+```bash
 TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
 TELEGRAM_CHAT_ID=123456789
-Save the file
+```
+3. Save the file
+
 Step 4: Test It
+```bash
 python -c "from alert_system import AlertSystem; a = AlertSystem(); a.send_telegram('Test message!')"
+```
+
 You should receive a message on Telegram!
 
-Option 2: Email Alerts
+####  Option 2: Email Alerts
 Step 1: Create App Password (Gmail)
-Go to Google Account Security
-Enable 2-Step Verification if not already
-Go to App Passwords
-Select app: Mail
-Select device: Other (name it "Trading System")
-Click Generate
-Copy the 16-character password
+    - Go to Google Account Security
+    - Enable 2-Step Verification if not already
+    - Go to App Passwords
+    - Select app: Mail
+    - Select device: Other (name it "Trading System")
+    - Click Generate
+    - Copy the 16-character password
 Step 2: Configure the System
-Open .env file
-Add:
-EMAIL_SENDER=your_email@gmail.com
-EMAIL_PASSWORD=xxxx xxxx xxxx xxxx
-EMAIL_RECEIVER=your_email@gmail.com
-Save the file
-❓ Frequently Asked Questions
-General Questions
+    - Open .env file
+    - Add:
+        *EMAIL_SENDER=your_email@gmail.com
+        EMAIL_PASSWORD=xxxx xxxx xxxx xxxx
+        EMAIL_RECEIVER=your_email@gmail.com*
+    - Save the file
+
+### ❓ Frequently Asked Questions
+#### General Questions
+
 Q: How much money do I need to start?
-A: The system is configured for
-50
-,
-000
-,
-b
-u
-t
-y
-o
-u
-c
-a
-n
-c
-h
-a
-n
-g
-e
-t
-h
-i
-s
-i
-n
-‘
-c
-o
-n
-f
-i
-g
-.
-p
-y
-‘
-.
-W
-e
-r
-e
-c
-o
-m
-m
-e
-n
-d
-a
-t
-l
-e
-a
-s
-t
-50,000,butyoucanchangethisin‘config.py‘.Werecommendatleast5,000 for proper position sizing.
+A: The system is configured for 50,000,butyoucanchangethisin‘config.py‘.Werecommendatleast5,000 for proper position sizing.
 
 Q: Is this guaranteed to make money?
 A: No trading system guarantees profits. This system aims for 4% monthly returns, but losses are possible. Always use stop losses and never risk money you can't afford to lose.
@@ -687,57 +707,69 @@ A: No. Focus on STRONG BUY signals first. Only trade 1-3 stocks at a time when s
 Q: What if my order doesn't fill?
 A: If the stock doesn't reach your entry price, that's okay. Don't chase it - wait for the next signal.
 
-🔧 Troubleshooting
-Common Issues and Solutions
-Issue: "No module named 'xyz'"
+### 🔧 Troubleshooting
+#### Common Issues and Solutions
+#### Issue: "No module named 'xyz'"
+```bash
 pip install xyz
 
 # Or reinstall everything:
 pip install -r requirements.txt
-Issue: "No signals found"
+
+```
+####  Issue: "No signals found"
 This can happen when:
 
-Market is overbought (too high)
-It's a low volatility period
-Criteria are too strict
+- Market is overbought (too high)
+- It's a low volatility period
+- Criteria are too strict
+
 Solution: Wait for better setups or run python main.py scan to see all analyzed stocks.
 
-Issue: "Connection error" or "No data"
-Check your internet connection
-Yahoo Finance might be temporarily down
-Wait a few minutes and try again
-Issue: Dashboard won't open
+#### Issue: "Connection error" or "No data"
+- Check your internet connection
+- Yahoo Finance might be temporarily down
+- Wait a few minutes and try again
+
+#### Issue: Dashboard won't open
+```bash
 # Try installing streamlit directly
 pip install streamlit
 
 # Then run
 streamlit run dashboard.py
-Issue: Slow performance
-Close other programs
-Run python main.py quick-update instead of full update
-Reduce the number of stocks in config.py
-📚 Glossary of Terms
-Term	Definition
-ATR	Average True Range - measures how much a stock moves daily
-EMA	Exponential Moving Average - average price over time
-Entry	The price at which you buy the stock
-Exit	The price at which you sell the stock
-Limit Order	An order to buy/sell at a specific price or better
-Momentum	How strongly a stock is moving in one direction
-Position Size	How many shares to buy
-Pullback	A temporary dip in an uptrending stock
-R:R	Risk/Reward - ratio of potential profit to potential loss
-RSI	Relative Strength Index - measures overbought/oversold
-Stop Loss	An order to sell if price drops to limit losses
-Support	Price level where stock tends to stop falling
-Resistance	Price level where stock tends to stop rising
-Swing Trading	Holding stocks for days to weeks
-Target	Price level where you plan to take profits
-Trend	The overall direction of stock price
-Volume	Number of shares traded
-📋 Quick Reference Card
-Print this and keep it at your desk!
+```
 
+#### Issue: Slow performance
+- Close other programs
+- Run python main.py quick-update instead of full update
+- Reduce the number of stocks in config.py
+
+### 📚 Glossary of Terms
+| Term          | Definition                                              |
+|---------------|---------------------------------------------------------|
+| ATR           | Average True Range - measures how much a stock moves daily |
+| EMA           | Exponential Moving Average - average price over time    |
+| Entry         | The price at which you buy the stock                    |
+| Exit          | The price at which you sell the stock                   |
+| Limit Order   | An order to buy/sell at a specific price or better      |
+| Momentum      | How strongly a stock is moving in one direction         |
+| Position Size | How many shares to buy                                  |
+| Pullback      | A temporary dip in an uptrending stock                  |
+| R:R           | Risk/Reward - ratio of potential profit to potential loss |
+| RSI           | Relative Strength Index - measures overbought/oversold  |
+| Stop Loss     | An order to sell if price drops to limit losses         |
+| Support       | Price level where stock tends to stop falling           |
+| Resistance    | Price level where stock tends to stop rising            |
+| Swing Trading | Holding stocks for days to weeks                        |
+| Target        | Price level where you plan to take profits              |
+| Trend         | The overall direction of stock price                    |
+| Volume        | Number of shares traded                                 |
+
+
+### 📋 Quick Reference Card
+#### Print this and keep it at your desk!
+```bash
 ╔═══════════════════════════════════════════════════════════════╗
 ║                   DAILY TRADING CHECKLIST                     ║
 ╠═══════════════════════════════════════════════════════════════╣
@@ -790,26 +822,31 @@ Print this and keep it at your desk!
 ║  ✓ Don't chase - wait for entry price                         ║
 ║                                                               ║
 ╚═══════════════════════════════════════════════════════════════╝
-🎓 Next Steps
-Week 1: Paper Trading
-Run signals daily but don't use real money
-Write down what you would have traded
-Track results on paper
-Week 2-3: Small Positions
-Start with half the recommended position size
-Trade only STRONG BUY signals
-Maximum 2 positions at once
-Week 4+: Normal Trading
-Gradually increase to full position sizes
-Add more positions (up to 8)
-Review your trade journal weekly
-⚠️ Risk Disclaimer
-IMPORTANT: Trading involves substantial risk of loss. Never invest money you cannot afford to lose. This system is a tool to assist with trading decisions but does not guarantee profits. Past performance does not guarantee future results. Always do your own research before making investment decisions.
+```
+### 🎓 Next Steps
+#### Week 1: Paper Trading
 
-📄 License
+- Run signals daily but don't use real money
+- Write down what you would have traded
+- Track results on paper
+
+#### Week 2-3: Small Positions
+- Start with half the recommended position size
+- Trade only STRONG BUY signals
+- Maximum 2 positions at once
+
+#### Week 4+: Normal Trading
+- Gradually increase to full position sizes
+- Add more positions (up to 8)
+- Review your trade journal weekly
+
+#### ⚠️ Risk Disclaimer
+**IMPORTANT**: Trading involves substantial risk of loss. Never invest money you cannot afford to lose. This system is a tool to assist with trading decisions but does not guarantee profits. Past performance does not guarantee future results. Always do your own research before making investment decisions.
+
+### 📄 License
 This project is for educational and personal use.
 
-📞 Support
+### 📞 Support
 If you need help:
 
 Re-read this guide
