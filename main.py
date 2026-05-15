@@ -1,4 +1,4 @@
-"""Main Trading System - Entry point"""
+"""Main Trading System - WITH DYNAMIC UNIVERSE"""
 
 import argparse
 from datetime import datetime
@@ -11,6 +11,7 @@ from position_manager import PositionManager
 from alert_system import AlertSystem
 from broker_api import BrokerAPI
 from backtester import Backtester
+from universe_manager import UniverseManager
 import config
 
 
@@ -36,6 +37,12 @@ def run_signals():
     print("\n" + "=" * 60)
     print("GENERATING SIGNALS")
     print("=" * 60)
+
+    # Reload config to get latest universe
+    import importlib
+    importlib.reload(config)
+
+    print(f"Using universe of {len(config.STOCK_UNIVERSE)} stocks")
 
     gen = SignalGenerator()
     signals = gen.generate_signals()
@@ -72,11 +79,14 @@ def run_analysis(symbol: str):
         print(f"  {k}: {v}")
 
 
-def run_backtest(symbols: list, period: str = "1y"):
+def run_backtest(symbols: list = None, period: str = "1y"):
     """Run backtest"""
     print("\n" + "=" * 60)
     print("RUNNING BACKTEST")
     print("=" * 60)
+
+    if symbols is None:
+        symbols = config.STOCK_UNIVERSE[:15]
 
     bt = Backtester()
     results = bt.run(symbols, period)
@@ -90,7 +100,6 @@ def run_portfolio():
     print("=" * 60)
 
     broker = BrokerAPI(paper=True)
-    pm = PositionManager()
 
     account = broker.get_account()
     print(f"\nAccount Status: {account.get('status')}")
@@ -106,12 +115,58 @@ def run_portfolio():
         print("\nNo open positions")
 
 
+def run_universe_update(quick: bool = False, top_n: int = 50):
+    """Update stock universe"""
+    um = UniverseManager()
+
+    if quick:
+        um.quick_update(top_n=top_n)
+    else:
+        um.update_universe(top_n=top_n)
+
+
+def show_universe():
+    """Show current universe"""
+    um = UniverseManager()
+    universe = um.load_universe()
+
+    print("\n" + "=" * 60)
+    print("CURRENT TRADING UNIVERSE")
+    print("=" * 60)
+    print(f"Total stocks: {len(universe)}")
+    print("\nStocks:")
+
+    for i, symbol in enumerate(universe):
+        print(f"  {i+1:2}. {symbol}", end="")
+        if (i + 1) % 5 == 0:
+            print()
+    print()
+
+
+def show_universe_report():
+    """Show detailed universe report"""
+    um = UniverseManager()
+    um.load_universe()
+
+    from pathlib import Path
+    rankings_file = Path(__file__).parent / "data" / "stock_rankings.csv"
+
+    if rankings_file.exists():
+        import pandas as pd
+        um.ranked_stocks = pd.read_csv(rankings_file)
+
+    um.print_universe_report()
+
+
 def main():
     parser = argparse.ArgumentParser(description="Swing Trading System")
-    parser.add_argument("command", choices=["scan", "signals", "analyze", "backtest", "portfolio"],
+    parser.add_argument("command",
+                       choices=["scan", "signals", "analyze", "backtest", "portfolio",
+                               "update-universe", "quick-update", "universe", "universe-report"],
                        help="Command to run")
     parser.add_argument("--symbol", "-s", help="Stock symbol for analysis")
     parser.add_argument("--period", "-p", default="1y", help="Backtest period")
+    parser.add_argument("--top", "-n", type=int, default=50, help="Number of top stocks for universe")
 
     args = parser.parse_args()
 
@@ -128,9 +183,17 @@ def main():
         else:
             print("Please provide --symbol")
     elif args.command == "backtest":
-        run_backtest(config.STOCK_UNIVERSE[:10], args.period)
+        run_backtest(period=args.period)
     elif args.command == "portfolio":
         run_portfolio()
+    elif args.command == "update-universe":
+        run_universe_update(quick=False, top_n=args.top)
+    elif args.command == "quick-update":
+        run_universe_update(quick=True, top_n=args.top)
+    elif args.command == "universe":
+        show_universe()
+    elif args.command == "universe-report":
+        show_universe_report()
 
 
 if __name__ == "__main__":
