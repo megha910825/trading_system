@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Market Configuration - Settings for US, German, and Indian Markets
+Market Configuration - Definitions for US, German, and Indian Markets
 """
 
 from dataclasses import dataclass
 from typing import Dict, List
-import pytz
 
-# ============================================================
-# MARKET DEFINITIONS
-# ============================================================
+
+# ═══════════════════════════════════════════════════════════════
+# MARKET INFO DATACLASS
+# ═══════════════════════════════════════════════════════════════
 
 @dataclass
 class MarketInfo:
@@ -17,370 +17,285 @@ class MarketInfo:
     name: str
     code: str
     currency: str
+    currency_symbol: str
     timezone: str
     open_time: str
     close_time: str
-    suffix: str  # Yahoo Finance suffix
-    min_price: float
-    max_price: float
-    min_volume: int
-    min_market_cap: float
+    suffix: str
 
 
-# Define all supported markets
+# ═══════════════════════════════════════════════════════════════
+# MARKET FLAGS & SYMBOLS
+# ═══════════════════════════════════════════════════════════════
+
+MARKET_FLAGS = {
+    "US": "🇺🇸",
+    "DE": "🇩🇪",
+    "IN": "🇮🇳",
+    "GLOBAL": "🌐",
+}
+
+CURRENCY_SYMBOLS = {
+    "USD": "$",
+    "EUR": "€",
+    "INR": "₹",
+}
+
+
+# ═══════════════════════════════════════════════════════════════
+# MARKET SETTINGS
+# ═══════════════════════════════════════════════════════════════
+
 MARKETS: Dict[str, MarketInfo] = {
     "US": MarketInfo(
         name="United States",
         code="US",
         currency="USD",
+        currency_symbol="$",
         timezone="America/New_York",
         open_time="09:30",
         close_time="16:00",
-        suffix="",  # No suffix for US stocks
-        min_price=10,
-        max_price=2000,
-        min_volume=500_000,
-        min_market_cap=1_000_000_000,  # $1B
+        suffix="",
     ),
     "DE": MarketInfo(
         name="Germany",
         code="DE",
         currency="EUR",
+        currency_symbol="€",
         timezone="Europe/Berlin",
         open_time="09:00",
         close_time="17:30",
-        suffix=".DE",  # Frankfurt Stock Exchange
-        min_price=5,
-        max_price=1000,
-        min_volume=100_000,
-        min_market_cap=500_000_000,  # €500M
+        suffix=".DE",
     ),
     "IN": MarketInfo(
         name="India",
         code="IN",
         currency="INR",
+        currency_symbol="₹",
         timezone="Asia/Kolkata",
         open_time="09:15",
         close_time="15:30",
-        suffix=".NS",  # NSE (National Stock Exchange)
-        min_price=50,
-        max_price=50000,
-        min_volume=100_000,
-        min_market_cap=10_000_000_000,  # ₹1000 Cr
+        suffix=".NS",
     ),
 }
 
-# Alternative suffix for BSE (Bombay Stock Exchange)
-INDIA_BSE_SUFFIX = ".BO"
 
-# ============================================================
-# STOCK UNIVERSES BY MARKET
-# ============================================================
+# ═══════════════════════════════════════════════════════════════
+# STOCK UNIVERSES
+# ═══════════════════════════════════════════════════════════════
 
-# US Stocks - S&P 500 / NASDAQ Top Stocks
 US_STOCKS = [
     # Tech - Semiconductors
-    "NVDA", "AMD", "AVGO", "QCOM", "INTC", "MU", "AMAT", "LRCX", "TSM",
+    "NVDA", "AMD", "AVGO", "QCOM", "INTC", "MU", "AMAT", "LRCX", "TSM", "MRVL",
+    "KLAC", "NXPI", "ON", "SWKS", "MPWR",
     # Tech - Software/Cloud
     "MSFT", "CRM", "ADBE", "NOW", "SNOW", "DDOG", "NET", "ZS", "CRWD", "PANW",
+    "ORCL", "PLTR", "MDB", "TEAM", "WDAY",
     # Tech - Internet
-    "GOOGL", "META", "AMZN", "NFLX", "UBER", "ABNB",
+    "GOOGL", "META", "AMZN", "NFLX", "UBER", "ABNB", "BKNG", "DASH", "SNAP",
     # Tech - Hardware
-    "AAPL", "DELL",
-    # Electric Vehicles
-    "TSLA", "RIVN",
+    "AAPL", "DELL", "HPQ", "HPE",
+    # EV & Energy
+    "TSLA", "RIVN", "LCID", "ENPH", "FSLR", "SEDG",
     # Fintech
-    "PYPL", "COIN", "V", "MA",
+    "PYPL", "SQ", "COIN", "V", "MA", "AXP", "FIS", "FISV",
     # Consumer
-    "COST", "TGT", "WMT", "HD", "NKE", "SBUX", "MCD",
+    "COST", "TGT", "WMT", "HD", "LOW", "NKE", "SBUX", "MCD", "CMG", "YUM",
+    "LULU", "ROST", "TJX",
     # Finance
-    "JPM", "GS", "BAC", "MS",
+    "JPM", "GS", "MS", "BAC", "WFC", "C", "BLK", "SCHW",
     # Healthcare
-    "UNH", "JNJ", "PFE", "LLY", "ABBV",
+    "UNH", "JNJ", "PFE", "LLY", "ABBV", "MRK", "TMO", "ABT", "ISRG", "DHR",
+    "BMY", "AMGN", "GILD", "VRTX", "REGN",
     # Industrial
-    "CAT", "BA", "HON", "GE",
+    "CAT", "BA", "HON", "GE", "UPS", "FDX", "RTX", "LMT", "NOC", "DE",
+    # Communication
+    "DIS", "CMCSA", "T", "VZ", "TMUS",
+    # Energy
+    "XOM", "CVX", "COP", "SLB", "EOG", "OXY",
 ]
 
-# German Stocks - DAX 40 + MDAX Top Stocks
 GERMAN_STOCKS = [
-    # DAX 40 Components
-    "SAP.DE",      # SAP SE - Software
-    "SIE.DE",      # Siemens AG - Industrial
-    "ALV.DE",      # Allianz SE - Insurance
-    "DTE.DE",      # Deutsche Telekom - Telecom
-    "AIR.DE",      # Airbus SE - Aerospace
-    "BAS.DE",      # BASF SE - Chemicals
-    "BAYN.DE",     # Bayer AG - Pharma
-    "BMW.DE",      # BMW - Automotive
-    "MBG.DE",      # Mercedes-Benz - Automotive
-    "VOW3.DE",     # Volkswagen - Automotive
-    "ADS.DE",      # Adidas - Consumer
-    "DHL.DE",      # DHL Group - Logistics
-    "MRK.DE",      # Merck KGaA - Pharma
-    "MUV2.DE",     # Munich Re - Insurance
-    "IFX.DE",      # Infineon - Semiconductors
-    "DB1.DE",      # Deutsche Börse - Finance
-    "DBK.DE",      # Deutsche Bank - Finance
-    "RWE.DE",      # RWE AG - Energy
-    "EON.DE",      # E.ON SE - Energy
-    "HEN3.DE",     # Henkel - Consumer
-    "BEI.DE",      # Beiersdorf - Consumer
-    "FRE.DE",      # Fresenius SE - Healthcare
-    "HEI.DE",      # HeidelbergCement - Materials
-    "VNA.DE",      # Vonovia - Real Estate
-    "CON.DE",      # Continental - Automotive
-    "PAH3.DE",     # Porsche Automobil - Automotive
-    "P911.DE",     # Porsche AG - Automotive
-    "SHL.DE",      # Siemens Healthineers - Healthcare
-    "SRT3.DE",     # Sartorius - Healthcare
-    "ZAL.DE",      # Zalando - E-commerce
-    "DHER.DE",     # Delivery Hero - E-commerce
-    "ENR.DE",      # Siemens Energy - Energy
-    "MTX.DE",      # MTU Aero Engines - Aerospace
-    "PUM.DE",      # Puma SE - Consumer
-    "HNR1.DE",     # Hannover Rück - Insurance
-    "QIA.DE",      # QIAGEN - Healthcare
-    "RHM.DE",      # Rheinmetall - Defense
-    "SY1.DE",      # Symrise - Chemicals
-    "1COV.DE",     # Covestro - Chemicals
-    "BNR.DE",      # Brenntag - Chemicals
+    # DAX 40
+    "SAP.DE", "SIE.DE", "ALV.DE", "DTE.DE", "AIR.DE", "BAS.DE", "BAYN.DE",
+    "BMW.DE", "MBG.DE", "VOW3.DE", "ADS.DE", "DHL.DE", "MRK.DE", "MUV2.DE",
+    "IFX.DE", "DB1.DE", "DBK.DE", "RWE.DE", "EON.DE", "HEN3.DE", "BEI.DE",
+    "FRE.DE", "VNA.DE", "CON.DE", "PAH3.DE", "P911.DE", "SHL.DE", "ZAL.DE",
+    "ENR.DE", "MTX.DE", "PUM.DE", "RHM.DE", "SY1.DE", "1COV.DE", "BNR.DE",
+    "HNR1.DE", "QIA.DE", "SRT3.DE", "DHER.DE",
     # MDAX Notable
-    "AFX.DE",      # Carl Zeiss Meditec - Healthcare
-    "EVK.DE",      # Evonik - Chemicals
-    "LEG.DE",      # LEG Immobilien - Real Estate
-    "NDA.DE",      # Aurubis - Materials
-    "TEG.DE",      # TAG Immobilien - Real Estate
+    "AFX.DE", "EVK.DE", "LEG.DE", "TLX.DE", "GXI.DE", "FME.DE", "NDA.DE",
+    "TEG.DE", "AG1.DE", "KCO.DE",
 ]
 
-# Indian Stocks - NIFTY 50 + Top Midcaps
 INDIAN_STOCKS = [
-    # NIFTY 50 - Large Cap
-    "RELIANCE.NS",   # Reliance Industries - Conglomerate
-    "TCS.NS",        # Tata Consultancy Services - IT
-    "HDFCBANK.NS",   # HDFC Bank - Banking
-    "INFY.NS",       # Infosys - IT
-    "ICICIBANK.NS",  # ICICI Bank - Banking
-    "HINDUNILVR.NS", # Hindustan Unilever - FMCG
-    "ITC.NS",        # ITC Limited - Conglomerate
-    "SBIN.NS",       # State Bank of India - Banking
-    "BHARTIARTL.NS", # Bharti Airtel - Telecom
-    "KOTAKBANK.NS",  # Kotak Mahindra Bank - Banking
-    "LT.NS",         # Larsen & Toubro - Infrastructure
-    "AXISBANK.NS",   # Axis Bank - Banking
-    "ASIANPAINT.NS", # Asian Paints - Paints
-    "MARUTI.NS",     # Maruti Suzuki - Automotive
-    "HCLTECH.NS",    # HCL Technologies - IT
-    "SUNPHARMA.NS",  # Sun Pharma - Pharma
-    "TITAN.NS",      # Titan Company - Consumer
-    "WIPRO.NS",      # Wipro - IT
-    "BAJFINANCE.NS", # Bajaj Finance - Finance
-    "ULTRACEMCO.NS", # UltraTech Cement - Cement
-    "TATAMOTORS.NS", # Tata Motors - Automotive
-    "ONGC.NS",       # ONGC - Oil & Gas
-    "NTPC.NS",       # NTPC - Power
-    "POWERGRID.NS",  # Power Grid Corp - Power
-    "M&M.NS",        # Mahindra & Mahindra - Automotive
-    "TATASTEEL.NS",  # Tata Steel - Steel
-    "JSWSTEEL.NS",   # JSW Steel - Steel
-    "ADANIENT.NS",   # Adani Enterprises - Conglomerate
-    "ADANIPORTS.NS", # Adani Ports - Infrastructure
-    "COALINDIA.NS",  # Coal India - Mining
-    "TECHM.NS",      # Tech Mahindra - IT
-    "NESTLEIND.NS",  # Nestle India - FMCG
-    "DRREDDY.NS",    # Dr. Reddy's - Pharma
-    "CIPLA.NS",      # Cipla - Pharma
-    "DIVISLAB.NS",   # Divi's Labs - Pharma
-    "GRASIM.NS",     # Grasim Industries - Diversified
-    "BRITANNIA.NS",  # Britannia - FMCG
-    "BAJAJFINSV.NS", # Bajaj Finserv - Finance
-    "HEROMOTOCO.NS", # Hero MotoCorp - Automotive
-    "EICHERMOT.NS",  # Eicher Motors - Automotive
-    "INDUSINDBK.NS", # IndusInd Bank - Banking
-    "APOLLOHOSP.NS", # Apollo Hospitals - Healthcare
-    "HDFCLIFE.NS",   # HDFC Life - Insurance
-    "SBILIFE.NS",    # SBI Life - Insurance
-    "TATACONSUM.NS", # Tata Consumer - FMCG
-    "BPCL.NS",       # BPCL - Oil & Gas
-    "HINDALCO.NS",   # Hindalco - Metals
-    "UPL.NS",        # UPL - Agrochemicals
+    # NIFTY 50
+    "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS",
+    "HINDUNILVR.NS", "ITC.NS", "SBIN.NS", "BHARTIARTL.NS", "KOTAKBANK.NS",
+    "LT.NS", "AXISBANK.NS", "ASIANPAINT.NS", "MARUTI.NS", "HCLTECH.NS",
+    "SUNPHARMA.NS", "TITAN.NS", "WIPRO.NS", "BAJFINANCE.NS", "ULTRACEMCO.NS",
+    "TATAMOTORS.NS", "ONGC.NS", "NTPC.NS", "POWERGRID.NS", "M&M.NS",
+    "TATASTEEL.NS", "JSWSTEEL.NS", "ADANIENT.NS", "ADANIPORTS.NS", "COALINDIA.NS",
+    "TECHM.NS", "NESTLEIND.NS", "DRREDDY.NS", "CIPLA.NS", "DIVISLAB.NS",
+    "GRASIM.NS", "BRITANNIA.NS", "BAJAJFINSV.NS", "HEROMOTOCO.NS", "EICHERMOT.NS",
+    "INDUSINDBK.NS", "APOLLOHOSP.NS", "HDFCLIFE.NS", "SBILIFE.NS", "TATACONSUM.NS",
+    "BPCL.NS", "HINDALCO.NS", "UPL.NS",
     # Top Midcaps
-    "ZOMATO.NS",     # Zomato - Food Delivery
-    "PAYTM.NS",      # Paytm - Fintech
-    "NYKAA.NS",      # Nykaa - E-commerce
-    "DMART.NS",      # DMart - Retail
-    "PIIND.NS",      # PI Industries - Chemicals
-    "PERSISTENT.NS", # Persistent Systems - IT
-    "LTIM.NS",       # LTIMindtree - IT
-    "MPHASIS.NS",    # Mphasis - IT
-    "COFORGE.NS",    # Coforge - IT
-    "TRENT.NS",      # Trent - Retail
-    "POLYCAB.NS",    # Polycab - Cables
-    "ASTRAL.NS",     # Astral - Pipes
-    "DIXON.NS",      # Dixon Technologies - Electronics
-    "IRCTC.NS",      # IRCTC - Travel
-    "HAL.NS",        # Hindustan Aeronautics - Defense
-    "BEL.NS",        # Bharat Electronics - Defense
-    "NHPC.NS",       # NHPC - Power
-    "PFC.NS",        # Power Finance Corp - Finance
-    "RECLTD.NS",     # REC Limited - Finance
-    "RVNL.NS",       # RVNL - Infrastructure
+    "ZOMATO.NS", "DMART.NS", "PIIND.NS", "PERSISTENT.NS", "LTIM.NS",
+    "MPHASIS.NS", "COFORGE.NS", "TRENT.NS", "POLYCAB.NS", "DIXON.NS",
+    "IRCTC.NS", "HAL.NS", "BEL.NS", "PFC.NS", "RECLTD.NS", "RVNL.NS",
 ]
 
-# ============================================================
-# SECTOR MAPPINGS
-# ============================================================
 
-SECTOR_MAPPING = {
-    # US Sectors
-    "Technology": "TECH",
-    "Consumer Cyclical": "CONSUMER",
-    "Financial Services": "FINANCE",
-    "Healthcare": "HEALTH",
-    "Communication Services": "COMM",
-    "Industrials": "INDUSTRIAL",
-    "Consumer Defensive": "CONSUMER",
-    "Energy": "ENERGY",
-    "Basic Materials": "MATERIALS",
-    "Real Estate": "REALESTATE",
-    "Utilities": "UTILITIES",
+# ═══════════════════════════════════════════════════════════════
+# HELPER FUNCTIONS
+# ═══════════════════════════════════════════════════════════════
 
-    # German Sectors
-    "Technologie": "TECH",
-    "Konsumgüter": "CONSUMER",
-    "Finanzdienstleistungen": "FINANCE",
-    "Gesundheit": "HEALTH",
-    "Industrie": "INDUSTRIAL",
-
-    # Indian Sectors
-    "Information Technology": "TECH",
-    "Financial": "FINANCE",
-    "Pharmaceuticals": "HEALTH",
-    "Automobile": "AUTO",
-    "FMCG": "CONSUMER",
-    "Banking": "FINANCE",
-    "Oil & Gas": "ENERGY",
-    "Metals": "MATERIALS",
-    "Power": "UTILITIES",
-    "Infrastructure": "INDUSTRIAL",
-    "Telecom": "COMM",
-}
-
-# ============================================================
-# CURRENCY CONVERSION (for portfolio value)
-# ============================================================
-
-# Default exchange rates (updated dynamically)
-DEFAULT_EXCHANGE_RATES = {
-    "USD": 1.0,
-    "EUR": 1.08,  # EUR to USD
-    "INR": 0.012,  # INR to USD
-}
-
-# ============================================================
-# TRADING HOURS CHECK
-# ============================================================
-
-def is_market_open(market_code: str) -> bool:
-    """Check if a market is currently open"""
-    from datetime import datetime
-
-    if market_code not in MARKETS:
-        return False
-
-    market = MARKETS[market_code]
-    tz = pytz.timezone(market.timezone)
-    now = datetime.now(tz)
-
-    # Check if weekend
-    if now.weekday() >= 5:
-        return False
-
-    # Parse open/close times
-    open_hour, open_min = map(int, market.open_time.split(":"))
-    close_hour, close_min = map(int, market.close_time.split(":"))
-
-    open_time = now.replace(hour=open_hour, minute=open_min, second=0)
-    close_time = now.replace(hour=close_hour, minute=close_min, second=0)
-
-    return open_time <= now <= close_time
+def get_market_flag(market: str) -> str:
+    """Get flag emoji for a market"""
+    return MARKET_FLAGS.get(market, "🌐")
 
 
-def get_market_status() -> Dict[str, str]:
-    """Get status of all markets"""
-    status = {}
-    from datetime import datetime
+def get_currency_symbol(market_or_currency: str) -> str:
+    """Get currency symbol for a market or currency code"""
+    # Check if it's a currency code
+    if market_or_currency in CURRENCY_SYMBOLS:
+        return CURRENCY_SYMBOLS[market_or_currency]
 
-    for code, market in MARKETS.items():
-        tz = pytz.timezone(market.timezone)
-        now = datetime.now(tz)
+    # Check if it's a market code
+    market_info = MARKETS.get(market_or_currency)
+    if market_info:
+        return market_info.currency_symbol
 
-        if is_market_open(code):
-            status[code] = f"🟢 OPEN ({now.strftime('%H:%M')} {market.timezone})"
-        else:
-            status[code] = f"🔴 CLOSED ({now.strftime('%H:%M')} {market.timezone})"
+    return "$"
 
-    return status
+
+def detect_market(symbol: str) -> str:
+    """Detect which market a symbol belongs to"""
+    symbol = symbol.upper()
+    if symbol.endswith(".DE"):
+        return "DE"
+    elif symbol.endswith(".NS") or symbol.endswith(".BO"):
+        return "IN"
+    elif "=X" in symbol or "=F" in symbol:
+        return "GLOBAL"
+    return "US"
+
+
+def get_market_stocks(market: str) -> List[str]:
+    """Get stock list for a specific market"""
+    stocks = {
+        "US": US_STOCKS,
+        "DE": GERMAN_STOCKS,
+        "IN": INDIAN_STOCKS,
+    }
+    return stocks.get(market, [])
 
 
 def get_all_stocks(markets: List[str] = None) -> Dict[str, List[str]]:
     """Get all stocks grouped by market"""
-    if markets is None:
-        markets = ["US", "DE", "IN"]
+    all_stocks = {
+        "US": US_STOCKS,
+        "DE": GERMAN_STOCKS,
+        "IN": INDIAN_STOCKS,
+    }
 
-    stocks = {}
+    if markets:
+        return {k: v for k, v in all_stocks.items() if k in markets}
 
-    if "US" in markets:
-        stocks["US"] = US_STOCKS
-    if "DE" in markets:
-        stocks["DE"] = GERMAN_STOCKS
-    if "IN" in markets:
-        stocks["IN"] = INDIAN_STOCKS
-
-    return stocks
+    return all_stocks
 
 
 def get_flat_stock_list(markets: List[str] = None) -> List[str]:
-    """Get flat list of all stocks from specified markets"""
+    """Get flat list of all stocks"""
     all_stocks = get_all_stocks(markets)
     flat_list = []
-
-    for market, stocks in all_stocks.items():
+    for stocks in all_stocks.values():
         flat_list.extend(stocks)
-
     return flat_list
 
 
-# ============================================================
+def is_market_open(market: str) -> bool:
+    """
+    Check if a market is currently open
+    (Simplified - doesn't account for holidays)
+    """
+    try:
+        from datetime import datetime
+        import pytz
+
+        market_info = MARKETS.get(market)
+        if not market_info:
+            return False
+
+        tz = pytz.timezone(market_info.timezone)
+        now = datetime.now(tz)
+
+        # Check if weekend
+        if now.weekday() >= 5:
+            return False
+
+        # Parse times
+        open_h, open_m = map(int, market_info.open_time.split(":"))
+        close_h, close_m = map(int, market_info.close_time.split(":"))
+
+        open_time = now.replace(hour=open_h, minute=open_m, second=0)
+        close_time = now.replace(hour=close_h, minute=close_m, second=0)
+
+        return open_time <= now <= close_time
+    except:
+        return False
+
+
+def get_market_status() -> Dict[str, str]:
+    """Get status of all markets"""
+    try:
+        from datetime import datetime
+        import pytz
+
+        status = {}
+
+        for code, info in MARKETS.items():
+            try:
+                tz = pytz.timezone(info.timezone)
+                now = datetime.now(tz)
+
+                if is_market_open(code):
+                    status[code] = f"🟢 OPEN ({now.strftime('%H:%M')})"
+                else:
+                    status[code] = f"🔴 CLOSED ({now.strftime('%H:%M')})"
+            except:
+                status[code] = "⚪ UNKNOWN"
+
+        return status
+    except:
+        return {code: "⚪ UNKNOWN" for code in MARKETS.keys()}
+
+
+# ═══════════════════════════════════════════════════════════════
 # MAIN / TEST
-# ============================================================
+# ═══════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
-    print("=" * 60)
+    print("=" * 50)
     print("MARKET CONFIGURATION")
-    print("=" * 60)
+    print("=" * 50)
 
-    print("\n📊 SUPPORTED MARKETS:")
-    for code, market in MARKETS.items():
-        print(f"\n  {market.name} ({code}):")
-        print(f"    Currency: {market.currency}")
-        print(f"    Hours: {market.open_time} - {market.close_time} ({market.timezone})")
-        print(f"    Yahoo Suffix: '{market.suffix}'")
+    print("\n📊 MARKETS:")
+    for code, info in MARKETS.items():
+        flag = get_market_flag(code)
+        print(f"  {flag} {info.name} ({code})")
+        print(f"     Currency: {info.currency} ({info.currency_symbol})")
+        print(f"     Hours: {info.open_time} - {info.close_time}")
 
-    print("\n" + "=" * 60)
-    print("MARKET STATUS")
-    print("=" * 60)
+    print("\n📈 STOCK COUNTS:")
+    print(f"  🇺🇸 US: {len(US_STOCKS)} stocks")
+    print(f"  🇩🇪 DE: {len(GERMAN_STOCKS)} stocks")
+    print(f"  🇮🇳 IN: {len(INDIAN_STOCKS)} stocks")
+    print(f"  Total: {len(US_STOCKS) + len(GERMAN_STOCKS) + len(INDIAN_STOCKS)} stocks")
 
-    for code, status in get_market_status().items():
-        print(f"  {MARKETS[code].name}: {status}")
+    print("\n🕐 MARKET STATUS:")
+    for market, status in get_market_status().items():
+        print(f"  {get_market_flag(market)} {market}: {status}")
 
-    print("\n" + "=" * 60)
-    print("STOCK COUNTS")
-    print("=" * 60)
-
-    all_stocks = get_all_stocks()
-    total = 0
-    for market, stocks in all_stocks.items():
-        print(f"  {MARKETS[market].name}: {len(stocks)} stocks")
-        total += len(stocks)
-
-    print(f"\n  Total: {total} stocks")
+    print("\n✅ Configuration loaded!")

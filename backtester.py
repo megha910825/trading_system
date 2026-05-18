@@ -1,521 +1,945 @@
 #!/usr/bin/env python3
 """
-Backtester - Tests trading strategy on historical data
-Enhanced for multi-market support
+Backtester - Test trading strategies on historical data
+Optimized for higher win rate
 """
 
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
-from dataclasses import dataclass, field
-from typing import List, Dict, Optional
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass, asdict
 
-from global_data_fetcher import GlobalDataFetcher
-from technical_analyzer import TechnicalAnalyzer
-from market_config import MARKETS
-import config
+# Handle imports gracefully
+try:
+    import config
+except ImportError:
+    config = None
 
+try:
+    from market_config import (
+        MARKETS, get_market_flag, get_currency_symbol,
+        US_STOCKS, GERMAN_STOCKS, INDIAN_STOCKS
+    )
+except ImportError:
+    MARKETS = {}
+    get_market_flag = lambda x: "🌐"
+    get_currency_symbol = lambda x: "$"
+    US_STOCKS = []
+    GERMAN_STOCKS = []
+    INDIAN_STOCKS = []
+
+
+# ═══════════════════════════════════════════════════════════════
+# DATA CLASSES
+# ═══════════════════════════════════════════════════════════════
 
 @dataclass
-class Trade:
-    """Represents a single trade"""
+class TradeResult:
+    """Result of a single backtest trade"""
     symbol: str
     market: str
-    currency: str
-    entry_date: datetime
+    entry_date: str
+    exit_date: str
     entry_price: float
-    exit_date: Optional[datetime] = None
-    exit_price: Optional[float] = None
-    shares: int = 0
-    stop_loss: float = 0
-    target_1: float = 0
-    target_2: float = 0
-    pnl: float = 0
-    pnl_pct: float = 0
-    exit_reason: str = ""
-    hold_days: int = 0
+    exit_price: float
+    shares: int
+    pnl: float
+    pnl_pct: float
+    status: str  # TARGET_1, TARGET_2, STOP_LOSS, TIME_EXIT
+    days_held: int
+    setup_type: str
 
 
 @dataclass
 class BacktestResults:
-    """Backtest results summary"""
-    # Basic stats
-    total_trades: int = 0
-    winning_trades: int = 0
-    losing_trades: int = 0
-    win_rate: float = 0
+    """Complete backtest results"""
+    # Settings
+    period: str
+    start_date: str
+    end_date: str
+    initial_capital: float
 
-    # P&L
-    total_pnl: float = 0
-    total_pnl_pct: float = 0
-    avg_win: float = 0
-    avg_loss: float = 0
-    largest_win: float = 0
-    largest_loss: float = 0
+    # Results
+    final_capital: float
+    total_pnl: float
+    total_pnl_pct: float
 
-    # Ratios
-    profit_factor: float = 0
-    avg_rr_ratio: float = 0
+    # Trade statistics
+    total_trades: int
+    winning_trades: int
+    losing_trades: int
+    win_rate: float
 
-    # Risk
-    max_drawdown: float = 0
-    max_drawdown_pct: float = 0
+    # P&L statistics
+    avg_win: float
+    avg_loss: float
+    largest_win: float
+    largest_loss: float
+    profit_factor: float
 
-    # Time
-    avg_hold_days: float = 0
+    # Risk metrics
+    max_drawdown: float
+    max_drawdown_pct: float
+    avg_hold_days: float
+
+    # Exit breakdown
+    target_1_exits: int
+    target_2_exits: int
+    stop_loss_exits: int
+    time_exits: int
 
     # By market
-    results_by_market: Dict = field(default_factory=dict)
+    results_by_market: Dict
 
-    # Trade list
-    trades: List[Trade] = field(default_factory=list)
+    # Individual trades
+    trades: List[TradeResult]
 
-    # Equity curve
-    equity_curve: List[float] = field(default_factory=list)
 
+# ═══════════════════════════════════════════════════════════════
+# SIMPLE DATA FETCHER (Fallback)
+# ═══════════════════════════════════════════════════════════════
+
+class SimpleDataFetcher:
+    """Simple data fetcher using yfinance directly"""
+
+    def __init__(self):
+        try:
+            import yfinance as yf
+            self.yf = yf
+        except ImportError:
+            print("Warning: yfinance not installed. Run: pip install yfinance")
+            self.yf = None
+
+    def get_stock_data(self, symbol: str, period: str = "1y") -> pd.DataFrame:
+        """Fetch stock data"""
+        if self.yf is None:
+            return pd.DataFrame()
+
+        try:
+            ticker = self.yf.Ticker(symbol)
+            df = ticker.history(period=period)
+
+            if df.empty:
+                return df
+
+            # Standardize column names
+            df.columns = df.columns.str.lower()
+
+            # Ensure required columns exist
+            required = ['open', 'high', 'low', 'close', 'volume']
+            if not all(col in df.columns for col in required):
+                return pd.DataFrame()
+
+            return df
+
+        except Exception as e:
+            print(f"Error fetching {symbol}: {e}")
+            return pd.DataFrame()
+
+
+# ═══════════════════════════════════════════════════════════════
+# SIMPLE TECHNICAL ANALYZER (Fallback)
+# ═══════════════════════════════════════════════════════════════
+
+class SimpleTechnicalAnalyzer:
+    """Simplified technical analyzer"""
+
+    def __init__(self):
+        self.ema_fast = 8
+        self.ema_slow = 21
+        self.ema_trend = 50
+        self.rsi_period = 14
+        self.atr_period = 14
+
+    def calculate_ema(self, series: pd.Series, period: int) -> pd.Series:
+        """Calculate EMA"""
+        return series.ewm(span=period, adjust=False).mean()
+
+    def calculate_rsi(self, series: pd.Series, period: int = 14) -> pd.Series:
+        """Calculate RSI"""
+        delta = series.diff()
+        gain = delta.where(delta > 0, 0).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        rs = gain / loss
+        return 100 - (100 / (1 + rs))
+
+    def calculate_atr(self, df: pd.DataFrame, period: int = 14) -> pd.Series:
+        """Calculate ATR"""
+        tr1 = df['high'] - df['low']
+        tr2 = abs(df['high'] - df['close'].shift())
+        tr3 = abs(df['low'] - df['close'].shift())
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        return tr.rolling(window=period).mean()
+
+    def analyze_stock(self, df: pd.DataFrame, symbol: str = "") -> Dict:
+        """Analyze a stock and generate signal"""
+        result = {
+            "symbol": symbol,
+            "signal_status": "AVOID",
+            "signal_score": 0,
+            "setup_type": "NONE",
+            "current_price": 0,
+        }
+
+        if df.empty or len(df) < 50:
+            return result
+
+        try:
+            # Calculate indicators
+            df = df.copy()
+            df['ema_8'] = self.calculate_ema(df['close'], 8)
+            df['ema_21'] = self.calculate_ema(df['close'], 21)
+            df['ema_50'] = self.calculate_ema(df['close'], 50)
+            df['rsi'] = self.calculate_rsi(df['close'], 14)
+            df['atr'] = self.calculate_atr(df, 14)
+
+            latest = df.iloc[-1]
+            prev = df.iloc[-2]
+
+            current_price = latest['close']
+            atr = latest['atr']
+            rsi = latest['rsi']
+
+            result['current_price'] = round(current_price, 2)
+
+            # Check trend
+            ema_bullish = (
+                latest['ema_8'] > latest['ema_21'] and
+                latest['ema_21'] > latest['ema_50'] and
+                current_price > latest['ema_50']
+            )
+
+            # Volume check
+            avg_volume = df['volume'].tail(20).mean()
+            volume_ratio = latest['volume'] / avg_volume if avg_volume > 0 else 1
+
+            # Score calculation
+            score = 0
+
+            # Trend points (40 max)
+            if ema_bullish:
+                score += 25
+            if current_price > latest['ema_50']:
+                score += 15
+
+            # RSI points (25 max)
+            if 40 <= rsi <= 60:
+                score += 25  # Ideal range
+            elif 35 <= rsi <= 65:
+                score += 15  # Acceptable
+            elif rsi > 70:
+                score -= 10  # Overbought penalty
+
+            # Volume points (15 max)
+            if volume_ratio > 1.2:
+                score += 15
+            elif volume_ratio > 0.8:
+                score += 8
+
+            # Pullback bonus (20 max)
+            if ema_bullish and current_price <= latest['ema_21'] * 1.02:
+                score += 20
+                result['setup_type'] = "PULLBACK"
+            elif ema_bullish:
+                score += 10
+                result['setup_type'] = "TREND"
+
+            result['signal_score'] = max(0, min(100, score))
+
+            # Determine signal
+            if score >= 70:
+                result['signal_status'] = "STRONG BUY"
+            elif score >= 55:
+                result['signal_status'] = "BUY"
+            elif score >= 40:
+                result['signal_status'] = "WATCH"
+            else:
+                result['signal_status'] = "AVOID"
+
+            # Calculate levels (only for actionable signals)
+            if result['signal_status'] in ['STRONG BUY', 'BUY']:
+                # Entry at current price or slight pullback
+                entry = current_price
+
+                # Stop loss: 2x ATR below entry
+                stop_loss = entry - (atr * 2.0)
+
+                # Targets
+                risk = entry - stop_loss
+                target_1 = entry + (risk * 2.0)  # 2:1 R:R
+                target_2 = entry + (risk * 3.5)  # 3.5:1 R:R
+
+                result['entry'] = round(entry, 2)
+                result['ideal_entry'] = round(entry, 2)
+                result['stop_loss'] = round(stop_loss, 2)
+                result['target_1'] = round(target_1, 2)
+                result['target_2'] = round(target_2, 2)
+                result['atr'] = round(atr, 2)
+                result['rsi'] = round(rsi, 1)
+                result['risk_reward'] = 2.0
+
+        except Exception as e:
+            result['error'] = str(e)
+
+        return result
+
+
+# ═══════════════════════════════════════════════════════════════
+# BACKTESTER CLASS
+# ═══════════════════════════════════════════════════════════════
 
 class Backtester:
     """
-    Backtests the swing trading strategy on historical data
+    Strategy backtester with realistic trade simulation
     """
 
-    def __init__(self, capital: float = None, risk_per_trade: float = None):
-        self.initial_capital = capital or config.ACCOUNT_SIZE
-        self.risk_per_trade = risk_per_trade or config.RISK_PER_TRADE
-        self.fetcher = GlobalDataFetcher()
-        self.analyzer = TechnicalAnalyzer()
-        self.exit_rules = config.EXIT_RULES
+    def __init__(self):
+        # Try to import advanced modules, fall back to simple versions
+        try:
+            from global_data_fetcher import GlobalDataFetcher
+            self.fetcher = GlobalDataFetcher()
+        except ImportError:
+            self.fetcher = SimpleDataFetcher()
 
-    def run(self, symbols: List[str], period: str = "1y",
-            verbose: bool = True) -> BacktestResults:
+        try:
+            from technical_analyzer import TechnicalAnalyzer
+            self.analyzer = TechnicalAnalyzer()
+        except ImportError:
+            self.analyzer = SimpleTechnicalAnalyzer()
+
+        # Default settings
+        self.initial_capital = getattr(config, 'ACCOUNT_SIZE', 50000) if config else 50000
+        self.risk_per_trade = getattr(config, 'RISK_PER_TRADE', 0.015) if config else 0.015
+        self.max_positions = getattr(config, 'MAX_POSITIONS', 8) if config else 8
+
+        # Exit rules
+        default_exit_rules = {
+            "stop_loss_atr_mult": 2.0,
+            "target_1_atr_mult": 3.0,
+            "target_2_atr_mult": 5.0,
+            "max_hold_days": 15,
+            "partial_exit_pct": 0.5,
+        }
+        self.exit_rules = getattr(config, 'EXIT_RULES', default_exit_rules) if config else default_exit_rules
+
+        # Results storage
+        self.trades: List[TradeResult] = []
+        self.equity_curve: List[float] = []
+
+    def get_period_data(self, symbol: str, period: str = "1y") -> pd.DataFrame:
+        """Get historical data for backtesting"""
+        return self.fetcher.get_stock_data(symbol, period)
+
+    def generate_historical_signals(self, df: pd.DataFrame, symbol: str) -> List[Dict]:
         """
-        Run backtest on given symbols
-
-        Args:
-            symbols: List of stock symbols
-            period: Historical period (6mo, 1y, 2y, etc.)
-            verbose: Print progress
-
-        Returns:
-            BacktestResults object
+        Generate signals for historical data points
+        Walk through the data and generate signals at each point
         """
-        if verbose:
-            print("\n" + "=" * 60)
-            print("BACKTESTING STRATEGY")
-            print("=" * 60)
-            print(f"Period: {period}")
-            print(f"Symbols: {len(symbols)}")
-            print(f"Initial Capital: €{self.initial_capital:,.2f}")
-            print(f"Risk per Trade: {self.risk_per_trade * 100}%")
+        signals = []
 
-        all_trades = []
-        equity = self.initial_capital
-        equity_curve = [equity]
-        max_equity = equity
-        max_drawdown = 0
-
-        for i, symbol in enumerate(symbols):
-            if verbose:
-                print(f"\nProcessing {symbol} ({i+1}/{len(symbols)})...")
-
-            trades = self._backtest_symbol(symbol, period)
-
-            for trade in trades:
-                equity += trade.pnl
-                equity_curve.append(equity)
-
-                # Track drawdown
-                if equity > max_equity:
-                    max_equity = equity
-                drawdown = (max_equity - equity) / max_equity * 100
-                if drawdown > max_drawdown:
-                    max_drawdown = drawdown
-
-                all_trades.append(trade)
-
-                if verbose and trade.pnl != 0:
-                    status = "✅" if trade.pnl > 0 else "❌"
-                    print(f"  {status} {trade.symbol}: {trade.pnl_pct:+.1f}% "
-                          f"({trade.exit_reason}, {trade.hold_days}d)")
-
-        # Calculate results
-        results = self._calculate_results(all_trades, equity_curve, max_drawdown)
-
-        if verbose:
-            self.print_results(results)
-
-        return results
-
-    def _backtest_symbol(self, symbol: str, period: str) -> List[Trade]:
-        """Backtest a single symbol"""
-        trades = []
-
-        # Get historical data
-        df = self.fetcher.get_stock_data(symbol, period)
         if df.empty or len(df) < 100:
-            return trades
+            return signals
 
-        market = self.fetcher.detect_market(symbol)
-        currency = MARKETS[market].currency
+        # Need at least 100 days of data before generating signals
+        lookback = 100
 
-        # Calculate indicators
-        df = self.analyzer.calculate_indicators(df)
+        for i in range(lookback, len(df) - 20):  # Leave 20 days for trade simulation
+            # Get data up to this point (no future data)
+            historical_df = df.iloc[:i+1].copy()
 
-        # Simulate trading
-        in_trade = False
-        trade = None
+            # Analyze
+            analysis = self.analyzer.analyze_stock(historical_df, symbol)
 
-        for i in range(50, len(df) - 1):
-            current = df.iloc[i]
-            next_day = df.iloc[i + 1]
-            date = df.index[i]
+            # Only keep BUY or STRONG BUY signals
+            if analysis.get('signal_status') in ['STRONG BUY', 'BUY']:
+                analysis['signal_date'] = df.index[i] if hasattr(df.index[i], 'strftime') else str(df.index[i])
+                analysis['signal_idx'] = i
+                signals.append(analysis)
 
-            if not in_trade:
-                # Check for entry signal
-                signal = self._check_entry_signal(df.iloc[:i+1])
+        return signals
 
-                if signal:
-                    # Calculate position size
-                    entry_price = current['close']
-                    atr = current['atr']
-                    stop_loss = entry_price - (self.exit_rules['stop_loss_atr_mult'] * atr)
-                    target_1 = entry_price + (self.exit_rules['target_1_atr_mult'] * atr)
-                    target_2 = entry_price + (self.exit_rules['target_2_atr_mult'] * atr)
+    def simulate_trade(self, df: pd.DataFrame, entry_idx: int, signal: Dict) -> Dict:
+        """
+        Simulate a trade with REALISTIC execution
+        """
+        entry_price = signal.get('entry', signal.get('ideal_entry', signal.get('current_price')))
+        stop_loss = signal.get('stop_loss', entry_price * 0.95)
+        target_1 = signal.get('target_1', entry_price * 1.04)  # Lower target
+        target_2 = signal.get('target_2', target_1 * 1.03)
 
-                    risk_per_share = entry_price - stop_loss
-                    if risk_per_share <= 0:
-                        continue
+        # Start from NEXT day (realistic - can't trade same day as signal)
+        start_idx = entry_idx + 1
 
-                    risk_amount = self.initial_capital * self.risk_per_trade
-                    shares = int(risk_amount / risk_per_share)
+        if start_idx >= len(df):
+            return {"status": "NO_FILL", "pnl": 0}
 
-                    if shares <= 0:
-                        continue
+        # Check if entry price was achievable in the next few days
+        entry_achieved = False
+        actual_entry_price = entry_price
+        actual_entry_idx = start_idx
 
-                    trade = Trade(
-                        symbol=symbol,
-                        market=market,
-                        currency=currency,
-                        entry_date=date,
-                        entry_price=entry_price,
-                        shares=shares,
-                        stop_loss=stop_loss,
-                        target_1=target_1,
-                        target_2=target_2,
-                    )
-                    in_trade = True
+        # Give 3 days to fill entry order
+        for i in range(start_idx, min(start_idx + 3, len(df))):
+            day = df.iloc[i]
 
-            else:
-                # Check for exit
-                high = next_day['high']
-                low = next_day['low']
-                close = next_day['close']
+            # Entry fills if price touches our entry level
+            if day['low'] <= entry_price <= day['high']:
+                entry_achieved = True
+                actual_entry_idx = i
+                actual_entry_price = entry_price
+                break
+            # Or if opens below our entry (better fill)
+            elif day['open'] < entry_price:
+                entry_achieved = True
+                actual_entry_idx = i
+                actual_entry_price = day['open']
+                break
+            # Or if opens above but comes back down (within 1%)
+            elif day['low'] <= entry_price * 1.01:
+                entry_achieved = True
+                actual_entry_idx = i
+                actual_entry_price = min(day['open'], entry_price * 1.01)
+                break
 
-                exit_price = None
-                exit_reason = None
+        if not entry_achieved:
+            return {"status": "NO_FILL", "pnl": 0}
 
-                # Check stop loss
-                if low <= trade.stop_loss:
-                    exit_price = trade.stop_loss
-                    exit_reason = "STOP_LOSS"
+        # Calculate position size
+        risk_amount = self.initial_capital * self.risk_per_trade
+        risk_per_share = abs(actual_entry_price - stop_loss)
 
-                # Check target 1 (simplified - full exit at T1)
-                elif high >= trade.target_1:
-                    exit_price = trade.target_1
-                    exit_reason = "TARGET_1"
+        if risk_per_share <= 0:
+            return {"status": "INVALID", "pnl": 0}
 
-                # Check max hold days
-                hold_days = (df.index[i + 1] - trade.entry_date).days
-                if hold_days >= self.exit_rules['max_hold_days']:
-                    exit_price = close
-                    exit_reason = "TIME_EXIT"
+        shares = int(risk_amount / risk_per_share)
+        if shares <= 0:
+            return {"status": "INVALID", "pnl": 0}
 
-                # Execute exit
-                if exit_price:
-                    trade.exit_date = df.index[i + 1]
-                    trade.exit_price = exit_price
-                    trade.hold_days = hold_days
-                    trade.exit_reason = exit_reason
-                    trade.pnl = (exit_price - trade.entry_price) * trade.shares
-                    trade.pnl_pct = ((exit_price - trade.entry_price) / trade.entry_price) * 100
+        # Cap position size
+        max_position = self.initial_capital * 0.25
+        if shares * actual_entry_price > max_position:
+            shares = int(max_position / actual_entry_price)
 
-                    trades.append(trade)
-                    in_trade = False
-                    trade = None
+        position_value = actual_entry_price * shares
+
+        partial_exit_done = False
+        remaining_shares = shares
+        total_pnl = 0
+        current_stop = stop_loss
+
+        max_hold_days = self.exit_rules.get('max_hold_days', 15)
+
+        entry_date = df.index[actual_entry_idx] if hasattr(df.index[actual_entry_idx], 'strftime') else str(df.index[actual_entry_idx])
+        exit_date = entry_date
+        final_exit_price = actual_entry_price
+        final_status = "TIME_EXIT"
+
+        for i in range(actual_entry_idx + 1, min(actual_entry_idx + max_hold_days + 1, len(df))):
+            day = df.iloc[i]
+            days_held = i - actual_entry_idx
+            exit_date = df.index[i] if hasattr(df.index[i], 'strftime') else str(df.index[i])
+
+            # Check stop loss FIRST (most important)
+            if day['low'] <= current_stop:
+                exit_price = current_stop
+                pnl = (exit_price - actual_entry_price) * remaining_shares
+                total_pnl += pnl
+                final_exit_price = exit_price
+                final_status = "STOP_LOSS"
+
+                return {
+                    "status": final_status,
+                    "entry_date": str(entry_date),
+                    "exit_date": str(exit_date),
+                    "entry_price": actual_entry_price,
+                    "exit_price": final_exit_price,
+                    "pnl": total_pnl,
+                    "pnl_pct": (total_pnl / position_value) * 100 if position_value > 0 else 0,
+                    "days_held": days_held,
+                    "shares": shares,
+                }
+
+            # Check Target 1 (partial exit)
+            if not partial_exit_done and day['high'] >= target_1:
+                exit_shares = int(shares * 0.5)
+                pnl = (target_1 - actual_entry_price) * exit_shares
+                total_pnl += pnl
+                remaining_shares -= exit_shares
+                partial_exit_done = True
+
+                # Move stop to breakeven
+                current_stop = actual_entry_price
+
+                if remaining_shares <= 0:
+                    final_exit_price = target_1
+                    final_status = "TARGET_1"
+                    return {
+                        "status": final_status,
+                        "entry_date": str(entry_date),
+                        "exit_date": str(exit_date),
+                        "entry_price": actual_entry_price,
+                        "exit_price": final_exit_price,
+                        "pnl": total_pnl,
+                        "pnl_pct": (total_pnl / position_value) * 100 if position_value > 0 else 0,
+                        "days_held": days_held,
+                        "shares": shares,
+                    }
+
+            # Check Target 2 (full exit)
+            if partial_exit_done and day['high'] >= target_2:
+                pnl = (target_2 - actual_entry_price) * remaining_shares
+                total_pnl += pnl
+                final_exit_price = target_2
+                final_status = "TARGET_2"
+
+                return {
+                    "status": final_status,
+                    "entry_date": str(entry_date),
+                    "exit_date": str(exit_date),
+                    "entry_price": actual_entry_price,
+                    "exit_price": final_exit_price,
+                    "pnl": total_pnl,
+                    "pnl_pct": (total_pnl / position_value) * 100 if position_value > 0 else 0,
+                    "days_held": days_held,
+                    "shares": shares,
+                }
+
+        # Time exit - close at market
+        final_idx = min(actual_entry_idx + max_hold_days, len(df) - 1)
+        final_price = df.iloc[final_idx]['close']
+        exit_date = df.index[final_idx] if hasattr(df.index[final_idx], 'strftime') else str(df.index[final_idx])
+
+        pnl = (final_price - actual_entry_price) * remaining_shares
+        total_pnl += pnl
+        final_exit_price = final_price
+
+        return {
+            "status": "TIME_EXIT",
+            "entry_date": str(entry_date),
+            "exit_date": str(exit_date),
+            "entry_price": actual_entry_price,
+            "exit_price": final_exit_price,
+            "pnl": total_pnl,
+            "pnl_pct": (total_pnl / position_value) * 100 if position_value > 0 else 0,
+            "days_held": max_hold_days,
+            "shares": shares,
+        }
+
+    def backtest_symbol(self, symbol: str, period: str = "1y") -> List[Dict]:
+        """Backtest a single symbol"""
+        df = self.get_period_data(symbol, period)
+
+        if df.empty or len(df) < 100:
+            return []
+
+        # Generate historical signals
+        signals = self.generate_historical_signals(df, symbol)
+
+        trades = []
+        last_exit_idx = 0
+
+        for signal in signals:
+            entry_idx = signal.get('signal_idx', 0)
+
+            # Don't enter if still in previous trade (5 day cooldown)
+            if entry_idx <= last_exit_idx + 5:
+                continue
+
+            # Simulate the trade
+            result = self.simulate_trade(df, entry_idx, signal)
+
+            if result.get('status') not in ['NO_FILL', 'INVALID']:
+                result['symbol'] = symbol
+                result['setup_type'] = signal.get('setup_type', 'UNKNOWN')
+                trades.append(result)
+
+                # Update last exit
+                last_exit_idx = entry_idx + result.get('days_held', 0)
 
         return trades
 
-    def _check_entry_signal(self, df: pd.DataFrame) -> bool:
-        """Check if current bar has entry signal"""
-        if len(df) < 3:
-            return False
+    def backtest_universe(
+        self,
+        symbols: List[str],
+        period: str = "1y",
+        market: str = None
+    ) -> BacktestResults:
+        """Backtest entire universe of stocks"""
+        print(f"\n{'='*60}")
+        print(f"BACKTESTING - {len(symbols)} symbols, Period: {period}")
+        print(f"{'='*60}")
 
-        current = df.iloc[-1]
+        all_trades = []
 
-        # Basic conditions
-        conditions = [
-            current['close'] > current['ema_50'],  # Above 50 EMA (uptrend)
-            30 <= current['rsi'] <= 70,            # RSI not extreme
-            current['atr'] > 0,                     # Valid ATR
-        ]
+        for i, symbol in enumerate(symbols):
+            print(f"  [{i+1}/{len(symbols)}] {symbol}...", end=" ", flush=True)
 
-        # Pullback to EMA20
-        dist_from_ema20 = abs((current['close'] - current['ema_20']) / current['close'] * 100)
-        conditions.append(dist_from_ema20 < 5)  # Within 5% of EMA20
+            try:
+                trades = self.backtest_symbol(symbol, period)
 
-        return all(conditions)
+                # Add market info
+                for trade in trades:
+                    trade['market'] = market or self._detect_market(symbol)
 
-    def _calculate_results(self, trades: List[Trade],
-                          equity_curve: List[float],
-                          max_drawdown: float) -> BacktestResults:
-        """Calculate backtest results"""
-        results = BacktestResults()
-        results.trades = trades
-        results.equity_curve = equity_curve
-        results.max_drawdown_pct = max_drawdown
+                all_trades.extend(trades)
+                print(f"✓ {len(trades)} trades")
 
-        if not trades:
-            return results
+            except Exception as e:
+                print(f"✗ Error: {e}")
 
-        # Basic counts
-        results.total_trades = len(trades)
-        results.winning_trades = len([t for t in trades if t.pnl > 0])
-        results.losing_trades = len([t for t in trades if t.pnl < 0])
-        results.win_rate = (results.winning_trades / results.total_trades) * 100
-
-        # P&L
-        results.total_pnl = sum(t.pnl for t in trades)
-        results.total_pnl_pct = (results.total_pnl / self.initial_capital) * 100
-
-        wins = [t.pnl for t in trades if t.pnl > 0]
-        losses = [t.pnl for t in trades if t.pnl < 0]
-
-        results.avg_win = np.mean(wins) if wins else 0
-        results.avg_loss = np.mean(losses) if losses else 0
-        results.largest_win = max(wins) if wins else 0
-        results.largest_loss = min(losses) if losses else 0
-
-        # Profit factor
-        gross_profit = sum(wins) if wins else 0
-        gross_loss = abs(sum(losses)) if losses else 1
-        results.profit_factor = gross_profit / gross_loss if gross_loss > 0 else 0
-
-        # Hold time
-        results.avg_hold_days = np.mean([t.hold_days for t in trades])
-
-        # Results by market
-        for market in ["US", "DE", "IN"]:
-            market_trades = [t for t in trades if t.market == market]
-            if market_trades:
-                market_wins = len([t for t in market_trades if t.pnl > 0])
-                market_pnl = sum(t.pnl for t in market_trades)
-                results.results_by_market[market] = {
-                    "trades": len(market_trades),
-                    "wins": market_wins,
-                    "win_rate": (market_wins / len(market_trades)) * 100,
-                    "total_pnl": market_pnl,
-                }
+        # Calculate results
+        results = self._calculate_results(all_trades, period)
 
         return results
 
+    def _detect_market(self, symbol: str) -> str:
+        """Detect market from symbol"""
+        if symbol.endswith('.DE'):
+            return 'DE'
+        elif symbol.endswith('.NS') or symbol.endswith('.BO'):
+            return 'IN'
+        return 'US'
+
+    def _calculate_results(self, trades: List[Dict], period: str) -> BacktestResults:
+        """Calculate comprehensive backtest results"""
+
+        if not trades:
+            return BacktestResults(
+                period=period,
+                start_date="",
+                end_date="",
+                initial_capital=self.initial_capital,
+                final_capital=self.initial_capital,
+                total_pnl=0,
+                total_pnl_pct=0,
+                total_trades=0,
+                winning_trades=0,
+                losing_trades=0,
+                win_rate=0,
+                avg_win=0,
+                avg_loss=0,
+                largest_win=0,
+                largest_loss=0,
+                profit_factor=0,
+                max_drawdown=0,
+                max_drawdown_pct=0,
+                avg_hold_days=0,
+                target_1_exits=0,
+                target_2_exits=0,
+                stop_loss_exits=0,
+                time_exits=0,
+                results_by_market={},
+                trades=[],
+            )
+
+        # Basic stats
+        total_pnl = sum(t['pnl'] for t in trades)
+        final_capital = self.initial_capital + total_pnl
+
+        wins = [t for t in trades if t['pnl'] > 0]
+        losses = [t for t in trades if t['pnl'] <= 0]
+
+        win_rate = (len(wins) / len(trades)) * 100 if trades else 0
+
+        avg_win = sum(t['pnl'] for t in wins) / len(wins) if wins else 0
+        avg_loss = sum(t['pnl'] for t in losses) / len(losses) if losses else 0
+
+        gross_profit = sum(t['pnl'] for t in wins)
+        gross_loss = abs(sum(t['pnl'] for t in losses))
+        profit_factor = gross_profit / gross_loss if gross_loss > 0 else 0
+
+        # Exit breakdown
+        target_1_exits = len([t for t in trades if t['status'] == 'TARGET_1'])
+        target_2_exits = len([t for t in trades if t['status'] == 'TARGET_2'])
+        stop_loss_exits = len([t for t in trades if t['status'] == 'STOP_LOSS'])
+        time_exits = len([t for t in trades if t['status'] == 'TIME_EXIT'])
+
+        # Drawdown calculation
+        equity = self.initial_capital
+        peak = equity
+        max_dd = 0
+
+        for trade in trades:
+            equity += trade['pnl']
+            if equity > peak:
+                peak = equity
+            dd = peak - equity
+            if dd > max_dd:
+                max_dd = dd
+
+        max_dd_pct = (max_dd / self.initial_capital) * 100 if self.initial_capital > 0 else 0
+
+        # By market
+        results_by_market = {}
+        for market in ['US', 'DE', 'IN']:
+            market_trades = [t for t in trades if t.get('market') == market]
+            if market_trades:
+                market_wins = [t for t in market_trades if t['pnl'] > 0]
+                results_by_market[market] = {
+                    'trades': len(market_trades),
+                    'wins': len(market_wins),
+                    'win_rate': (len(market_wins) / len(market_trades)) * 100 if market_trades else 0,
+                    'pnl': sum(t['pnl'] for t in market_trades),
+                }
+
+        # Convert trades to TradeResult objects
+        trade_results = []
+        for t in trades:
+            trade_results.append(TradeResult(
+                symbol=t.get('symbol', ''),
+                market=t.get('market', 'US'),
+                entry_date=t.get('entry_date', ''),
+                exit_date=t.get('exit_date', ''),
+                entry_price=t.get('entry_price', 0),
+                exit_price=t.get('exit_price', 0),
+                shares=t.get('shares', 0),
+                pnl=t.get('pnl', 0),
+                pnl_pct=t.get('pnl_pct', 0),
+                status=t.get('status', ''),
+                days_held=t.get('days_held', 0),
+                setup_type=t.get('setup_type', ''),
+            ))
+
+        # Calculate average hold days
+        avg_hold = sum(t['days_held'] for t in trades) / len(trades) if trades else 0
+
+        return BacktestResults(
+            period=period,
+            start_date=trades[0].get('entry_date', '') if trades else '',
+            end_date=trades[-1].get('exit_date', '') if trades else '',
+            initial_capital=self.initial_capital,
+            final_capital=final_capital,
+            total_pnl=total_pnl,
+            total_pnl_pct=(total_pnl / self.initial_capital) * 100 if self.initial_capital > 0 else 0,
+            total_trades=len(trades),
+            winning_trades=len(wins),
+            losing_trades=len(losses),
+            win_rate=win_rate,
+            avg_win=avg_win,
+            avg_loss=avg_loss,
+            largest_win=max((t['pnl'] for t in wins), default=0),
+            largest_loss=min((t['pnl'] for t in losses), default=0),
+            profit_factor=profit_factor,
+            max_drawdown=max_dd,
+            max_drawdown_pct=max_dd_pct,
+            avg_hold_days=avg_hold,
+            target_1_exits=target_1_exits,
+            target_2_exits=target_2_exits,
+            stop_loss_exits=stop_loss_exits,
+            time_exits=time_exits,
+            results_by_market=results_by_market,
+            trades=trade_results,
+        )
+
     def print_results(self, results: BacktestResults):
-        """Print backtest results"""
+        """Print formatted backtest results"""
         print("\n" + "=" * 60)
         print("BACKTEST RESULTS")
         print("=" * 60)
 
         print(f"\n📊 OVERVIEW:")
-        print(f"   Initial Capital: €{self.initial_capital:,.2f}")
-        print(f"   Final Capital: €{self.initial_capital + results.total_pnl:,.2f}")
-        print(f"   Total P&L: €{results.total_pnl:,.2f} ({results.total_pnl_pct:+.2f}%)")
+        print(f"   Period: {results.period}")
+        print(f"   Initial Capital: ${results.initial_capital:,.2f}")
+        print(f"   Final Capital: ${results.final_capital:,.2f}")
+        print(f"   Total P&L: ${results.total_pnl:+,.2f} ({results.total_pnl_pct:+.2f}%)")
 
         print(f"\n📈 TRADE STATISTICS:")
         print(f"   Total Trades: {results.total_trades}")
-        print(f"   Winning Trades: {results.winning_trades}")
-        print(f"   Losing Trades: {results.losing_trades}")
+        print(f"   Winning: {results.winning_trades} | Losing: {results.losing_trades}")
         print(f"   Win Rate: {results.win_rate:.1f}%")
 
         print(f"\n💰 PROFIT/LOSS:")
-        print(f"   Average Win: €{results.avg_win:,.2f}")
-        print(f"   Average Loss: €{results.avg_loss:,.2f}")
-        print(f"   Largest Win: €{results.largest_win:,.2f}")
-        print(f"   Largest Loss: €{results.largest_loss:,.2f}")
+        print(f"   Average Win: ${results.avg_win:+,.2f}")
+        print(f"   Average Loss: ${results.avg_loss:+,.2f}")
+        print(f"   Largest Win: ${results.largest_win:+,.2f}")
+        print(f"   Largest Loss: ${results.largest_loss:+,.2f}")
         print(f"   Profit Factor: {results.profit_factor:.2f}")
 
         print(f"\n⚠️ RISK:")
-        print(f"   Max Drawdown: {results.max_drawdown_pct:.2f}%")
-
-        print(f"\n⏱️ TIME:")
+        print(f"   Max Drawdown: ${results.max_drawdown:,.2f} ({results.max_drawdown_pct:.2f}%)")
         print(f"   Avg Hold Days: {results.avg_hold_days:.1f}")
 
-        # Results by market
+        total = max(results.total_trades, 1)
+        print(f"\n🎯 EXIT BREAKDOWN:")
+        print(f"   Target 1: {results.target_1_exits} ({results.target_1_exits/total*100:.1f}%)")
+        print(f"   Target 2: {results.target_2_exits} ({results.target_2_exits/total*100:.1f}%)")
+        print(f"   Stop Loss: {results.stop_loss_exits} ({results.stop_loss_exits/total*100:.1f}%)")
+        print(f"   Time Exit: {results.time_exits} ({results.time_exits/total*100:.1f}%)")
+
         if results.results_by_market:
             print(f"\n🌍 BY MARKET:")
             for market, data in results.results_by_market.items():
-                flag = {"US": "🇺🇸", "DE": "🇩🇪", "IN": "🇮🇳"}.get(market, "🌐")
-                print(f"   {flag} {market}: {data['trades']} trades, "
-                      f"{data['win_rate']:.1f}% win rate, €{data['total_pnl']:,.2f}")
+                flag = get_market_flag(market)
+                print(f"   {flag} {market}: {data['trades']} trades | {data['win_rate']:.1f}% win | ${data['pnl']:+,.2f}")
 
-        # Exit reasons
-        if results.trades:
-            print(f"\n📤 EXIT REASONS:")
-            reasons = {}
-            for t in results.trades:
-                reasons[t.exit_reason] = reasons.get(t.exit_reason, 0) + 1
-            for reason, count in sorted(reasons.items(), key=lambda x: x[1], reverse=True):
-                pct = (count / results.total_trades) * 100
-                print(f"   {reason}: {count} ({pct:.1f}%)")
+        # Quality assessment
+        print(f"\n📋 ASSESSMENT:")
+        if results.win_rate >= 55 and results.profit_factor >= 1.5:
+            print("   ✅ GOOD - Strategy is profitable")
+        elif results.win_rate >= 50 and results.profit_factor >= 1.2:
+            print("   ⚠️ ACCEPTABLE - Strategy is marginally profitable")
+        else:
+            print("   ❌ NEEDS WORK - Strategy needs improvement")
 
-        print("\n" + "=" * 60)
+        print("=" * 60)
 
-    def save_results(self, results: BacktestResults, filename: str = None):
-        """Save results to file"""
-        if filename is None:
-            filename = f"backtest_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    def save_results(self, results: BacktestResults, filepath: str = None):
+        """Save results to JSON file"""
+        if filepath is None:
+            data_dir = getattr(config, 'DATA_DIR', Path('data')) if config else Path('data')
+            data_dir = Path(data_dir)
+            data_dir.mkdir(exist_ok=True)
 
-        filepath = config.DATA_DIR / filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filepath = data_dir / f"backtest_{timestamp}.json"
 
         data = {
             "timestamp": datetime.now().isoformat(),
-            "initial_capital": self.initial_capital,
-            "risk_per_trade": self.risk_per_trade,
-            "total_trades": results.total_trades,
-            "win_rate": results.win_rate,
+            "period": results.period,
+            "initial_capital": results.initial_capital,
+            "final_capital": results.final_capital,
             "total_pnl": results.total_pnl,
             "total_pnl_pct": results.total_pnl_pct,
+            "total_trades": results.total_trades,
+            "win_rate": results.win_rate,
             "profit_factor": results.profit_factor,
             "max_drawdown_pct": results.max_drawdown_pct,
-            "avg_hold_days": results.avg_hold_days,
             "results_by_market": results.results_by_market,
-            "trades": [
-                {
-                    "symbol": t.symbol,
-                    "market": t.market,
-                    "entry_date": t.entry_date.isoformat() if t.entry_date else None,
-                    "exit_date": t.exit_date.isoformat() if t.exit_date else None,
-                    "entry_price": t.entry_price,
-                    "exit_price": t.exit_price,
-                    "pnl": t.pnl,
-                    "pnl_pct": t.pnl_pct,
-                    "exit_reason": t.exit_reason,
-                    "hold_days": t.hold_days,
-                }
-                for t in results.trades
-            ]
+            "trades": [asdict(t) for t in results.trades],
         }
 
         with open(filepath, 'w') as f:
-            json.dump(data, f, indent=2)
+            json.dump(data, f, indent=2, default=str)
 
-        print(f"✓ Results saved to {filepath}")
+        print(f"\n✅ Results saved to: {filepath}")
         return filepath
 
-    def run_market_comparison(self, period: str = "1y") -> Dict:
-        """Run backtest comparing all markets"""
-        print("\n" + "=" * 60)
-        print("MARKET COMPARISON BACKTEST")
-        print("=" * 60)
 
-        from market_config import US_STOCKS, GERMAN_STOCKS, INDIAN_STOCKS
+# ═══════════════════════════════════════════════════════════════
+# CONVENIENCE FUNCTIONS
+# ═══════════════════════════════════════════════════════════════
 
-        market_results = {}
+def run_backtest(
+    symbols: List[str] = None,
+    period: str = "1y",
+    market: str = None,
+    save: bool = False
+) -> BacktestResults:
+    """Run backtest with default settings"""
+    backtester = Backtester()
 
-        # Germany
-        print("\n🇩🇪 Testing German Stocks...")
-        de_symbols = GERMAN_STOCKS[:15]
-        de_results = self.run(de_symbols, period, verbose=False)
-        market_results["DE"] = de_results
+    # Get symbols if not provided
+    if symbols is None:
+        if market == "US":
+            symbols = US_STOCKS[:30] if US_STOCKS else ["AAPL", "MSFT", "GOOGL", "NVDA", "AMD"]
+        elif market == "DE":
+            symbols = GERMAN_STOCKS[:20] if GERMAN_STOCKS else ["SAP.DE", "SIE.DE"]
+        elif market == "IN":
+            symbols = INDIAN_STOCKS[:20] if INDIAN_STOCKS else ["TCS.NS", "RELIANCE.NS"]
+        else:
+            # Mixed
+            us = US_STOCKS[:15] if US_STOCKS else ["AAPL", "MSFT", "NVDA"]
+            de = GERMAN_STOCKS[:10] if GERMAN_STOCKS else ["SAP.DE"]
+            ind = INDIAN_STOCKS[:10] if INDIAN_STOCKS else ["TCS.NS"]
+            symbols = us + de + ind
 
-        # US
-        print("\n🇺🇸 Testing US Stocks...")
-        us_symbols = US_STOCKS[:15]
-        us_results = self.run(us_symbols, period, verbose=False)
-        market_results["US"] = us_results
+    results = backtester.backtest_universe(symbols, period, market)
+    backtester.print_results(results)
 
-        # India
-        print("\n🇮🇳 Testing Indian Stocks...")
-        in_symbols = INDIAN_STOCKS[:15]
-        in_results = self.run(in_symbols, period, verbose=False)
-        market_results["IN"] = in_results
+    if save:
+        backtester.save_results(results)
 
-        # Print comparison
-        print("\n" + "=" * 60)
-        print("MARKET COMPARISON RESULTS")
-        print("=" * 60)
-
-        print(f"\n{'Market':<10} {'Trades':<10} {'Win Rate':<12} {'P&L':<15} {'Profit Factor':<15}")
-        print("-" * 60)
-
-        for market, results in market_results.items():
-            flag = {"US": "🇺🇸", "DE": "🇩🇪", "IN": "🇮🇳"}.get(market, "🌐")
-            print(f"{flag} {market:<7} {results.total_trades:<10} "
-                  f"{results.win_rate:<12.1f} €{results.total_pnl:<14,.2f} "
-                  f"{results.profit_factor:<15.2f}")
-
-        return market_results
+    return results
 
 
-# ============================================================
+def compare_markets(period: str = "1y") -> Dict:
+    """Compare performance across markets"""
+    backtester = Backtester()
+
+    print("\n" + "=" * 60)
+    print("MARKET COMPARISON")
+    print("=" * 60)
+
+    all_results = {}
+
+    # US
+    us_symbols = US_STOCKS[:20] if US_STOCKS else ["AAPL", "MSFT", "GOOGL", "NVDA", "AMD"]
+    print(f"\n🇺🇸 Testing US Market ({len(us_symbols)} stocks)...")
+    us_results = backtester.backtest_universe(us_symbols, period, "US")
+    all_results["US"] = us_results
+
+    # Germany
+    de_symbols = GERMAN_STOCKS[:15] if GERMAN_STOCKS else ["SAP.DE", "SIE.DE"]
+    print(f"\n🇩🇪 Testing German Market ({len(de_symbols)} stocks)...")
+    de_results = backtester.backtest_universe(de_symbols, period, "DE")
+    all_results["DE"] = de_results
+
+    # India
+    in_symbols = INDIAN_STOCKS[:15] if INDIAN_STOCKS else ["TCS.NS", "RELIANCE.NS"]
+    print(f"\n🇮🇳 Testing Indian Market ({len(in_symbols)} stocks)...")
+    in_results = backtester.backtest_universe(in_symbols, period, "IN")
+    all_results["IN"] = in_results
+
+    # Print comparison
+    print("\n" + "=" * 70)
+    print("MARKET COMPARISON RESULTS")
+    print("=" * 70)
+
+    print(f"\n{'Market':<12} {'Trades':<10} {'Win Rate':<12} {'P&L':<18} {'Profit Factor':<15}")
+    print("-" * 70)
+
+    for market, results in all_results.items():
+        flag = get_market_flag(market)
+        pnl_str = f"${results.total_pnl:+,.2f}"
+        print(f"{flag} {market:<9} {results.total_trades:<10} {results.win_rate:<11.1f}% {pnl_str:<18} {results.profit_factor:<15.2f}")
+
+    print("-" * 70)
+
+    # Best market
+    best_market = max(all_results.keys(), key=lambda m: all_results[m].profit_factor)
+    print(f"\n🏆 Best Market: {get_market_flag(best_market)} {best_market} (Profit Factor: {all_results[best_market].profit_factor:.2f})")
+
+    return all_results
+
+
+# ═══════════════════════════════════════════════════════════════
 # MAIN / CLI
-# ============================================================
+# ═══════════════════════════════════════════════════════════════
 
-def main():
+if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Backtester")
-    parser.add_argument("command", nargs="?", default="run",
-                       choices=["run", "compare", "german", "us", "india"],
-                       help="Command to run")
-    parser.add_argument("--period", "-p", default="1y", help="Backtest period")
-    parser.add_argument("--capital", "-c", type=float, default=50000, help="Initial capital")
-    parser.add_argument("--save", "-s", action="store_true", help="Save results")
+    parser = argparse.ArgumentParser(description="Backtest Trading Strategy")
+    parser.add_argument(
+        "command",
+        nargs="?",
+        default="run",
+        choices=["run", "compare", "us", "german", "india", "de", "in"],
+        help="Command to run"
+    )
+    parser.add_argument("--period", "-p", default="1y", help="Backtest period (6mo, 1y, 2y)")
+    parser.add_argument("--save", "-s", action="store_true", help="Save results to file")
+    parser.add_argument("--symbols", "-sym", nargs="+", help="Specific symbols to test")
 
     args = parser.parse_args()
 
-    bt = Backtester(capital=args.capital)
-
     if args.command == "run":
-        # Use current universe
-        from global_universe_manager import GlobalUniverseManager
-        um = GlobalUniverseManager()
-        universe = um.load_universe()
-
-        symbols = []
-        for market, stocks in universe.items():
-            symbols.extend(stocks[:10])  # Top 10 from each
-
-        if not symbols:
-            # Fallback
-            symbols = config.DEFAULT_UNIVERSE
-
-        results = bt.run(symbols, args.period)
-
-        if args.save:
-            bt.save_results(results)
+        run_backtest(symbols=args.symbols, period=args.period, save=args.save)
 
     elif args.command == "compare":
-        bt.run_market_comparison(args.period)
-
-    elif args.command == "german":
-        from market_config import GERMAN_STOCKS
-        results = bt.run(GERMAN_STOCKS[:20], args.period)
-        if args.save:
-            bt.save_results(results, "backtest_german.json")
+        compare_markets(args.period)
 
     elif args.command == "us":
-        from market_config import US_STOCKS
-        results = bt.run(US_STOCKS[:20], args.period)
-        if args.save:
-            bt.save_results(results, "backtest_us.json")
+        run_backtest(market="US", period=args.period, save=args.save)
 
-    elif args.command == "india":
-        from market_config import INDIAN_STOCKS
-        results = bt.run(INDIAN_STOCKS[:20], args.period)
-        if args.save:
-            bt.save_results(results, "backtest_india.json")
+    elif args.command in ["german", "de"]:
+        run_backtest(market="DE", period=args.period, save=args.save)
 
+    elif args.command in ["india", "in"]:
+        run_backtest(market="IN", period=args.period, save=args.save)
 
-if __name__ == "__main__":
-    main()
+    else:
+        run_backtest(period=args.period, save=args.save)
