@@ -1,107 +1,36 @@
 #!/usr/bin/env python3
 """
-Trading Dashboard - Global Markets Version
-Supports: US, Germany, India
-Compatible with updated TechnicalAnalyzer
+Trading Dashboard - Complete System for 3%+ Monthly Returns
 """
 
 import streamlit as st
 import pandas as pd
+import sqlite3
 from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
-# Page config - MUST be first
+# ═══════════════════════════════════════════════════════════════
+# PAGE CONFIG - Must be first
+# ═══════════════════════════════════════════════════════════════
+
 st.set_page_config(
-    page_title="Global Trading System",
-    page_icon="🌍",
+    page_title="Trading System",
+    page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # ═══════════════════════════════════════════════════════════════
-# IMPORTS WITH ERROR HANDLING
+# SESSION STATE INITIALIZATION
 # ═══════════════════════════════════════════════════════════════
 
-# Import config
-try:
-    import config
-except ImportError:
-    st.error("❌ config.py not found!")
-    st.stop()
+# Initialize session state for navigation
+if 'current_page' not in st.session_state:
+    st.session_state.current_page = "🏠 Dashboard"
 
-# Import modules with error handling
-modules_status = {}
-
-try:
-    from global_data_fetcher import GlobalDataFetcher
-    modules_status["GlobalDataFetcher"] = True
-except ImportError as e:
-    modules_status["GlobalDataFetcher"] = False
-    GlobalDataFetcher = None
-
-try:
-    from technical_analyzer import TechnicalAnalyzer
-    modules_status["TechnicalAnalyzer"] = True
-except ImportError as e:
-    modules_status["TechnicalAnalyzer"] = False
-    TechnicalAnalyzer = None
-
-try:
-    from global_universe_manager import GlobalUniverseManager
-    modules_status["GlobalUniverseManager"] = True
-except ImportError as e:
-    modules_status["GlobalUniverseManager"] = False
-    GlobalUniverseManager = None
-
-try:
-    from global_signal_generator import GlobalSignalGenerator
-    modules_status["GlobalSignalGenerator"] = True
-except ImportError as e:
-    modules_status["GlobalSignalGenerator"] = False
-    GlobalSignalGenerator = None
-
-try:
-    from position_manager import PositionManager
-    modules_status["PositionManager"] = True
-except ImportError as e:
-    modules_status["PositionManager"] = False
-    PositionManager = None
-
-try:
-    from backtester import Backtester
-    modules_status["Backtester"] = True
-except ImportError as e:
-    modules_status["Backtester"] = False
-    Backtester = None
-
-try:
-    from market_config import MARKETS, get_market_status
-    modules_status["market_config"] = True
-except ImportError as e:
-    modules_status["market_config"] = False
-    # Fallback market config
-    class MarketInfo:
-        def __init__(self, name, currency):
-            self.name = name
-            self.currency = currency
-
-    MARKETS = {
-        "US": MarketInfo("United States", "USD"),
-        "DE": MarketInfo("Germany", "EUR"),
-        "IN": MarketInfo("India", "INR"),
-    }
-
-    def get_market_status():
-        return {"US": "Open", "DE": "Open", "IN": "Open"}
-
-try:
-    import yfinance as yf
-    modules_status["yfinance"] = True
-except ImportError:
-    modules_status["yfinance"] = False
-    yf = None
-
+if 'trigger_signals' not in st.session_state:
+    st.session_state.trigger_signals = False
 
 # ═══════════════════════════════════════════════════════════════
 # CUSTOM CSS
@@ -109,95 +38,126 @@ except ImportError:
 
 st.markdown("""
 <style>
-    .market-card {
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin-bottom: 1rem;
+    .metric-card {
+        background-color: #1e1e1e;
+        border-radius: 10px;
+        padding: 15px;
+        margin: 5px 0;
     }
-    .us-market { background-color: #1a365d; color: white; }
-    .de-market { background-color: #1a202c; color: white; }
-    .in-market { background-color: #2d3748; color: white; }
-    .signal-strong-buy { background-color: #00C851; color: white; padding: 0.2rem 0.5rem; border-radius: 0.25rem; }
-    .signal-buy { background-color: #ffbb33; color: black; padding: 0.2rem 0.5rem; border-radius: 0.25rem; }
-    .signal-watch { background-color: #33b5e5; color: white; padding: 0.2rem 0.5rem; border-radius: 0.25rem; }
+    .stProgress > div > div > div > div {
+        background-color: #00C851;
+    }
+    div[data-testid="stMetricValue"] {
+        font-size: 1.5rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-
 # ═══════════════════════════════════════════════════════════════
-# HELPER FUNCTIONS
+# IMPORTS WITH ERROR HANDLING
 # ═══════════════════════════════════════════════════════════════
 
-def safe_get(data: dict, key: str, default=None):
-    """Safely get value from dict with fallback keys"""
-    if key in data:
-        return data[key]
+# Config
+try:
+    import config
+    ACCOUNT_SIZE = getattr(config, 'ACCOUNT_SIZE', 50000)
+    MONTHLY_TARGET = getattr(config, 'MONTHLY_TARGET', 0.03)
+    RISK_PER_TRADE = getattr(config, 'RISK_PER_TRADE', 0.015)
+    MAX_POSITIONS = getattr(config, 'MAX_POSITIONS', 8)
+except ImportError:
+    ACCOUNT_SIZE = 50000
+    MONTHLY_TARGET = 0.03
+    RISK_PER_TRADE = 0.015
+    MAX_POSITIONS = 8
 
-    # Fallback mappings for different key names
-    fallbacks = {
-        'uptrend': ['trend', 'above_50_ema', 'above_ema50'],
-        'ideal_entry': ['entry', 'entry_price'],
-        'risk_reward': ['rr_1', 'rr', 'reward_risk'],
-        'atr_pct': ['atr_percent', 'atr_percentage'],
-        'rel_volume': ['relative_volume', 'volume_ratio'],
+# Data fetcher
+try:
+    from global_data_fetcher import GlobalDataFetcher
+    HAS_FETCHER = True
+except ImportError:
+    HAS_FETCHER = False
+    GlobalDataFetcher = None
+
+# Technical analyzer
+try:
+    from technical_analyzer import TechnicalAnalyzer
+    HAS_ANALYZER = True
+except ImportError:
+    HAS_ANALYZER = False
+    TechnicalAnalyzer = None
+
+# Signal generator
+try:
+    from global_signal_generator import GlobalSignalGenerator
+    HAS_SIGNALS = True
+except ImportError:
+    HAS_SIGNALS = False
+    GlobalSignalGenerator = None
+
+# Universe manager
+try:
+    from global_universe_manager import GlobalUniverseManager
+    HAS_UNIVERSE = True
+except ImportError:
+    HAS_UNIVERSE = False
+    GlobalUniverseManager = None
+
+# Backtester
+try:
+    from backtester import Backtester
+    HAS_BACKTESTER = True
+except ImportError:
+    HAS_BACKTESTER = False
+    Backtester = None
+
+# Market config
+try:
+    from market_config import MARKETS, get_market_status
+    HAS_MARKETS = True
+except ImportError:
+    HAS_MARKETS = False
+    class DummyMarket:
+        def __init__(self, name, currency):
+            self.name = name
+            self.currency = currency
+    MARKETS = {
+        "US": DummyMarket("United States", "USD"),
+        "DE": DummyMarket("Germany", "EUR"),
+        "IN": DummyMarket("India", "INR"),
     }
+    def get_market_status():
+        return {"US": "Unknown", "DE": "Unknown", "IN": "Unknown"}
 
-    if key in fallbacks:
-        for fallback_key in fallbacks[key]:
-            if fallback_key in data:
-                return data[fallback_key]
+# Trade Journal
+try:
+    from trade_journal import TradeJournal
+    HAS_JOURNAL = True
+except ImportError:
+    HAS_JOURNAL = False
+    TradeJournal = None
 
-    return default
+# Market Regime
+try:
+    from market_regime import MarketRegimeFilter, Regime
+    HAS_REGIME = True
+except ImportError:
+    HAS_REGIME = False
+    MarketRegimeFilter = None
 
+# Performance Tracker
+try:
+    from performance_tracker import PerformanceTracker
+    HAS_TRACKER = True
+except ImportError:
+    HAS_TRACKER = False
+    PerformanceTracker = None
 
-def is_uptrend(sig: dict) -> bool:
-    """Determine if signal indicates uptrend"""
-    # Check multiple possible keys
-    if 'uptrend' in sig:
-        return sig['uptrend']
-    if 'trend' in sig:
-        return sig['trend'] == 'BULLISH'
-    if 'above_50_ema' in sig:
-        return sig['above_50_ema']
-    if 'above_ema50' in sig:
-        return sig['above_ema50']
-    return False
-
-
-def get_entry_price(sig: dict) -> float:
-    """Get entry price from signal"""
-    return sig.get('ideal_entry', sig.get('entry', sig.get('entry_price', sig.get('current_price', 0))))
-
-
-def get_risk_reward(sig: dict) -> float:
-    """Get risk/reward ratio from signal"""
-    return sig.get('risk_reward', sig.get('rr_1', sig.get('rr', 0)))
-
-
-def get_atr_pct(sig: dict) -> float:
-    """Get ATR percentage from signal"""
-    return sig.get('atr_pct', sig.get('atr_percent', 0))
-
-
-def get_rel_volume(sig: dict) -> float:
-    """Get relative volume from signal"""
-    return sig.get('rel_volume', sig.get('relative_volume', sig.get('volume_ratio', 0)))
-
-
-@st.cache_data(ttl=300)
-def fetch_stock_data_direct(symbol: str, period: str = "6mo") -> pd.DataFrame:
-    """Fetch stock data directly using yfinance"""
-    if not yf:
-        return pd.DataFrame()
-
-    try:
-        ticker = yf.Ticker(symbol)
-        df = ticker.history(period=period)
-        if not df.empty:
-            df.columns = df.columns.str.lower()
-        return df
-    except Exception as e:
-        return pd.DataFrame()
+# yfinance
+try:
+    import yfinance as yf
+    HAS_YFINANCE = True
+except ImportError:
+    HAS_YFINANCE = False
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -206,232 +166,444 @@ def fetch_stock_data_direct(symbol: str, period: str = "6mo") -> pd.DataFrame:
 
 @st.cache_resource
 def init_components():
-    """Initialize all components with error handling"""
-    components = {}
+    """Initialize all components"""
+    comp = {}
 
-    if GlobalDataFetcher:
+    if HAS_FETCHER and GlobalDataFetcher:
         try:
-            components["fetcher"] = GlobalDataFetcher()
+            comp['fetcher'] = GlobalDataFetcher()
         except:
-            components["fetcher"] = None
-    else:
-        components["fetcher"] = None
+            pass
 
-    if TechnicalAnalyzer:
+    if HAS_ANALYZER and TechnicalAnalyzer:
         try:
-            components["analyzer"] = TechnicalAnalyzer()
+            comp['analyzer'] = TechnicalAnalyzer()
         except:
-            components["analyzer"] = None
-    else:
-        components["analyzer"] = None
+            pass
 
-    if GlobalUniverseManager:
+    if HAS_SIGNALS and GlobalSignalGenerator:
         try:
-            components["universe"] = GlobalUniverseManager()
+            comp['signals'] = GlobalSignalGenerator()
         except:
-            components["universe"] = None
-    else:
-        components["universe"] = None
+            pass
 
-    if GlobalSignalGenerator:
+    if HAS_UNIVERSE and GlobalUniverseManager:
         try:
-            components["signals"] = GlobalSignalGenerator()
+            comp['universe'] = GlobalUniverseManager()
         except:
-            components["signals"] = None
-    else:
-        components["signals"] = None
+            pass
 
-    if PositionManager:
+    if HAS_JOURNAL and TradeJournal:
         try:
-            components["positions"] = PositionManager()
+            comp['journal'] = TradeJournal()
         except:
-            components["positions"] = None
-    else:
-        components["positions"] = None
+            pass
 
-    if Backtester:
+    if HAS_REGIME and MarketRegimeFilter:
         try:
-            components["backtester"] = Backtester()
+            comp['regime'] = MarketRegimeFilter()
         except:
-            components["backtester"] = None
-    else:
-        components["backtester"] = None
+            pass
 
-    return components
+    if HAS_TRACKER and PerformanceTracker:
+        try:
+            comp['tracker'] = PerformanceTracker()
+        except:
+            pass
+
+    return comp
+
+comp = init_components()
 
 
-components = init_components()
+# ═══════════════════════════════════════════════════════════════
+# HELPER FUNCTIONS
+# ═══════════════════════════════════════════════════════════════
+
+def get_entry_price(sig):
+    return sig.get('ideal_entry', sig.get('entry', sig.get('entry_price', sig.get('current_price', 0))))
+
+def get_risk_reward(sig):
+    return sig.get('risk_reward', sig.get('rr_1', sig.get('rr', 0)))
+
+def is_uptrend(sig):
+    if 'uptrend' in sig:
+        return sig['uptrend']
+    if 'trend' in sig:
+        return sig['trend'] == 'BULLISH'
+    if 'above_ema50' in sig:
+        return sig['above_ema50']
+    return False
+
+@st.cache_data(ttl=300)
+def fetch_stock_data(symbol, period="6mo"):
+    if not HAS_YFINANCE:
+        return pd.DataFrame()
+    try:
+        ticker = yf.Ticker(symbol)
+        df = ticker.history(period=period)
+        if not df.empty:
+            df.columns = df.columns.str.lower()
+        return df
+    except:
+        return pd.DataFrame()
+
+@st.cache_data(ttl=60)
+def get_stock_info(symbol):
+    if not HAS_YFINANCE:
+        return {}
+    try:
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        return {
+            "name": info.get("shortName", symbol),
+            "sector": info.get("sector", "N/A"),
+            "industry": info.get("industry", "N/A"),
+        }
+    except:
+        return {"name": symbol, "sector": "N/A", "industry": "N/A"}
+
+
+# ═══════════════════════════════════════════════════════════════
+# NAVIGATION HELPER
+# ═══════════════════════════════════════════════════════════════
+
+def navigate_to(page_name):
+    """Helper function to navigate to a page"""
+    st.session_state.current_page = page_name
 
 
 # ═══════════════════════════════════════════════════════════════
 # SIDEBAR
 # ═══════════════════════════════════════════════════════════════
 
-st.sidebar.title("🌍 Global Trading System")
+st.sidebar.title("📈 Trading System")
+st.sidebar.markdown(f"**Target: {MONTHLY_TARGET*100:.0f}% Monthly**")
 
-# Account info
-monthly_target = getattr(config, 'MONTHLY_TARGET', 0.05)
-st.sidebar.markdown(f"**Target: {monthly_target*100:.0f}% Monthly**")
+# Market Regime Status
+if 'regime' in comp:
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🌍 Market Regime")
 
-# Market status
+    try:
+        conditions = comp['regime'].analyze()
+
+        regime_colors = {
+            "STRONG_BULL": "🟢",
+            "BULL": "🟢",
+            "NEUTRAL": "🟡",
+            "BEAR": "🔴",
+            "STRONG_BEAR": "🔴"
+        }
+
+        regime_icon = regime_colors.get(conditions.regime.value, "⚪")
+        st.sidebar.markdown(f"{regime_icon} **{conditions.regime.value}**")
+        st.sidebar.markdown(f"SPY: ${conditions.spy_price:,.2f} ({conditions.spy_change_1d:+.2f}%)")
+        st.sidebar.markdown(f"VIX: {conditions.vix_level:.1f}")
+        st.sidebar.markdown(f"**Size: {conditions.position_mult*100:.0f}%**")
+
+        if not conditions.can_trade_long:
+            st.sidebar.error("⚠️ Avoid Longs!")
+    except:
+        st.sidebar.warning("Regime unavailable")
+
+# Monthly Progress
+if 'tracker' in comp:
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("📊 Monthly Progress")
+
+    try:
+        progress = comp['tracker'].get_monthly_progress()
+        pct = progress.get('progress_pct', 0)
+        st.sidebar.progress(min(pct / 100, 1.0))
+        st.sidebar.markdown(f"P&L: **${progress.get('current_pnl', 0):+,.2f}** ({pct:.1f}%)")
+    except:
+        st.sidebar.info("No trades yet")
+
 st.sidebar.markdown("---")
-st.sidebar.subheader("📊 Market Status")
 
+# Market Status
+st.sidebar.subheader("🕐 Markets")
 try:
     status = get_market_status()
     for code, stat in status.items():
-        market = MARKETS[code]
         flag = {"US": "🇺🇸", "DE": "🇩🇪", "IN": "🇮🇳"}.get(code, "🌐")
-        market_name = market.name if hasattr(market, 'name') else code
-        st.sidebar.markdown(f"{flag} **{market_name}**: {stat}")
-except Exception as e:
-    st.sidebar.warning("Could not load market status")
+        st.sidebar.markdown(f"{flag} {stat}")
+except:
+    pass
 
 st.sidebar.markdown("---")
 
-# Module status
-with st.sidebar.expander("⚙️ System Status"):
-    for module, status in modules_status.items():
-        icon = "✅" if status else "❌"
-        st.write(f"{icon} {module}")
+# Navigation - use session state
+pages = ["🏠 Dashboard", "🎯 Signals", "📈 Analysis", "📋 Trade Journal",
+         "📊 Performance", "🔍 Scanner", "📉 Backtest", "📐 Calculator", "⚙️ Settings"]
 
-st.sidebar.markdown("---")
-
-# Navigation
+# Sync session state with radio selection
 page = st.sidebar.radio(
     "Navigate",
-    ["🏠 Dashboard", "🎯 Signals", "📈 Analysis", "🔍 Scanner",
-     "📉 Backtest", "📐 Calculator", "⚙️ Universe"]
+    pages,
+    index=pages.index(st.session_state.current_page) if st.session_state.current_page in pages else 0,
+    key="nav_radio"
 )
 
+# Update session state when radio changes
+if page != st.session_state.current_page:
+    st.session_state.current_page = page
+
+# System Status
+with st.sidebar.expander("⚙️ System Status"):
+    st.write(f"{'✅' if HAS_FETCHER else '❌'} Data Fetcher")
+    st.write(f"{'✅' if HAS_ANALYZER else '❌'} Analyzer")
+    st.write(f"{'✅' if HAS_SIGNALS else '❌'} Signals")
+    st.write(f"{'✅' if HAS_JOURNAL else '❌'} Trade Journal")
+    st.write(f"{'✅' if HAS_REGIME else '❌'} Market Regime")
+    st.write(f"{'✅' if HAS_TRACKER else '❌'} Performance")
+
 
 # ═══════════════════════════════════════════════════════════════
-# DASHBOARD PAGE
+# PAGE: DASHBOARD
 # ═══════════════════════════════════════════════════════════════
 
-if page == "🏠 Dashboard":
-    st.title("🌍 Global Trading Dashboard")
+if st.session_state.current_page == "🏠 Dashboard":
+    st.title("🏠 Trading Dashboard")
 
-    # Metrics row
-    account_size = getattr(config, 'ACCOUNT_SIZE', 50000)
-    risk_per_trade = getattr(config, 'RISK_PER_TRADE', 0.015)
-    max_positions = getattr(config, 'MAX_POSITIONS', 8)
-
+    # Top metrics
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Account Size", f"${account_size:,}")
-    col2.metric("Monthly Target", f"${account_size * monthly_target:,.0f}")
-    col3.metric("Risk/Trade", f"{risk_per_trade*100:.1f}%")
-    col4.metric("Max Positions", max_positions)
+    col1.metric("💰 Account", f"${ACCOUNT_SIZE:,}")
+    col2.metric("🎯 Monthly Target", f"${ACCOUNT_SIZE * MONTHLY_TARGET:,.0f}")
+    col3.metric("⚠️ Risk/Trade", f"{RISK_PER_TRADE*100:.1f}%")
+    col4.metric("📊 Max Positions", MAX_POSITIONS)
 
     st.markdown("---")
 
-    # Market overview
-    st.subheader("📊 Market Overview")
+    # Two column layout
+    col1, col2 = st.columns(2)
 
-    col1, col2, col3 = st.columns(3)
-
-    # US Market
     with col1:
-        st.markdown("### 🇺🇸 United States")
-        if components["fetcher"]:
-            try:
-                summary = components["fetcher"].get_market_summary("US")
-                for idx, data in summary.items():
-                    change_color = "green" if data["change_pct"] >= 0 else "red"
-                    st.markdown(f"**{idx}**: {data['price']:,.2f} "
-                               f"<span style='color:{change_color}'>({data['change_pct']:+.2f}%)</span>",
-                               unsafe_allow_html=True)
-            except:
-                st.info("Market data unavailable")
-        else:
-            st.info("Data fetcher not available")
+        # Market Regime
+        st.subheader("🌍 Market Regime")
 
-    # Germany Market
+        if 'regime' in comp:
+            try:
+                c = comp['regime'].analyze()
+
+                if c.regime.value in ["STRONG_BULL", "BULL"]:
+                    st.success(f"**{c.regime.value}** - {c.recommendation}")
+                elif c.regime.value == "NEUTRAL":
+                    st.warning(f"**{c.regime.value}** - {c.recommendation}")
+                else:
+                    st.error(f"**{c.regime.value}** - {c.recommendation}")
+
+                mc1, mc2, mc3 = st.columns(3)
+                mc1.metric("SPY", f"${c.spy_price:,.2f}", f"{c.spy_change_1d:+.2f}%")
+                mc2.metric("VIX", f"{c.vix_level:.1f}", c.vix_status)
+                mc3.metric("Size", f"{c.position_mult*100:.0f}%")
+
+            except Exception as e:
+                st.error(f"Error: {e}")
+        else:
+            st.info("Create market_regime.py to enable")
+
     with col2:
-        st.markdown("### 🇩🇪 Germany")
-        if components["fetcher"]:
-            try:
-                summary = components["fetcher"].get_market_summary("DE")
-                for idx, data in summary.items():
-                    change_color = "green" if data["change_pct"] >= 0 else "red"
-                    st.markdown(f"**{idx}**: {data['price']:,.2f} "
-                               f"<span style='color:{change_color}'>({data['change_pct']:+.2f}%)</span>",
-                               unsafe_allow_html=True)
-            except:
-                st.info("Market data unavailable")
-        else:
-            st.info("Data fetcher not available")
+        # Monthly Progress
+        st.subheader("📊 Monthly Progress")
 
-    # India Market
-    with col3:
-        st.markdown("### 🇮🇳 India")
-        if components["fetcher"]:
+        if 'tracker' in comp:
             try:
-                summary = components["fetcher"].get_market_summary("IN")
-                for idx, data in summary.items():
-                    change_color = "green" if data["change_pct"] >= 0 else "red"
-                    st.markdown(f"**{idx}**: {data['price']:,.2f} "
-                               f"<span style='color:{change_color}'>({data['change_pct']:+.2f}%)</span>",
-                               unsafe_allow_html=True)
+                p = comp['tracker'].get_monthly_progress()
+
+                pct = min(p.get('progress_pct', 0), 100)
+                st.progress(pct / 100)
+
+                if pct >= 100:
+                    st.success(f"🎉 Target achieved! {pct:.1f}%")
+                elif p.get('on_track', False):
+                    st.info(f"📈 On track: {pct:.1f}%")
+                else:
+                    st.warning(f"⚠️ Behind: {pct:.1f}%")
+
+                pc1, pc2 = st.columns(2)
+                pc1.metric("Current P&L", f"${p.get('current_pnl', 0):+,.2f}")
+                pc2.metric("Remaining", f"${p.get('remaining', 0):,.2f}")
+
             except:
-                st.info("Market data unavailable")
+                st.info("Start logging trades to see progress")
         else:
-            st.info("Data fetcher not available")
+            st.info("Create performance_tracker.py to enable")
 
     st.markdown("---")
 
-    # Quick signals
-    st.subheader("🎯 Quick Signal Scan")
+    # Open Positions
+    st.subheader("📂 Open Positions")
 
-    market_selection = st.multiselect(
-        "Select Markets",
-        ["US", "DE", "IN"],
-        default=["US", "DE", "IN"]
-    )
+    if 'journal' in comp:
+        try:
+            open_trades = comp['journal'].get_open_trades()
 
-    if st.button("🔍 Generate Signals", type="primary"):
-        if components["signals"]:
-            with st.spinner("Analyzing stocks..."):
+            if not open_trades.empty:
+                # Add current prices
+                for idx, row in open_trades.iterrows():
+                    try:
+                        ticker = yf.Ticker(row['symbol'])
+                        current = ticker.fast_info.get('lastPrice', row['entry_price'])
+                        open_trades.at[idx, 'current'] = current
+                        open_trades.at[idx, 'pnl'] = (current - row['entry_price']) * row['shares']
+                    except:
+                        open_trades.at[idx, 'current'] = row['entry_price']
+                        open_trades.at[idx, 'pnl'] = 0
+
+                st.dataframe(
+                    open_trades[['id', 'symbol', 'entry_date', 'entry_price',
+                                'shares', 'stop_loss', 'target_1', 'current', 'pnl']],
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                total_pnl = open_trades['pnl'].sum()
+                st.metric("Total Unrealized P&L", f"${total_pnl:+,.2f}")
+            else:
+                st.info("No open positions")
+        except:
+            st.info("No open positions")
+    else:
+        st.info("Create trade_journal.py to enable position tracking")
+
+    st.markdown("---")
+
+    # ═══════════════════════════════════════════════════════════
+    # QUICK ACTIONS - FIXED
+    # ═══════════════════════════════════════════════════════════
+
+    st.subheader("⚡ Quick Actions")
+
+    st.caption("Use the navigation dropdown in sidebar, or click below to expand inline:")
+
+    # Using expanders for inline actions instead of navigation
+
+    # Quick Signal Generation
+    with st.expander("🎯 Quick Signal Scan", expanded=False):
+        st.write("Generate trading signals for selected markets:")
+
+        quick_markets = st.multiselect(
+            "Markets",
+            ["US", "DE", "IN"],
+            default=["US"],
+            key="quick_markets"
+        )
+
+        if st.button("🚀 Generate Signals", key="quick_gen_signals"):
+            if HAS_SIGNALS:
+                with st.spinner("Scanning markets..."):
+                    try:
+                        gen = GlobalSignalGenerator()
+                        signals = gen.generate_signals(markets=quick_markets)
+
+                        total = 0
+                        for market, sigs in signals.items():
+                            if sigs:
+                                strong = [s for s in sigs if s.get('signal_status') == 'STRONG BUY']
+                                buys = [s for s in sigs if s.get('signal_status') == 'BUY']
+                                total += len(strong) + len(buys)
+
+                                st.markdown(f"**{market}:** {len(strong)} STRONG BUY, {len(buys)} BUY")
+
+                                for s in (strong + buys)[:3]:
+                                    st.write(f"  • {s['symbol']}: Score {s.get('signal_score', 0)}, "
+                                            f"Entry ${get_entry_price(s):,.2f}")
+
+                        if total == 0:
+                            st.info("No buy signals found")
+                        else:
+                            st.success(f"Found {total} signals! Go to 🎯 Signals page for details.")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+            else:
+                st.error("Signal generator not available")
+
+    # Quick Trade Logger
+    with st.expander("📋 Quick Trade Entry", expanded=False):
+        st.write("Log a new trade:")
+
+        qc1, qc2 = st.columns(2)
+
+        with qc1:
+            q_symbol = st.text_input("Symbol", "NVDA", key="q_symbol").upper()
+            q_entry = st.number_input("Entry $", value=100.0, key="q_entry")
+            q_shares = st.number_input("Shares", value=10, key="q_shares")
+
+        with qc2:
+            q_stop = st.number_input("Stop $", value=95.0, key="q_stop")
+            q_target = st.number_input("Target $", value=110.0, key="q_target")
+            q_setup = st.selectbox("Setup", ["PULLBACK", "BREAKOUT", "BOUNCE"], key="q_setup")
+
+        if st.button("✅ Log Trade", key="quick_log"):
+            if HAS_JOURNAL:
                 try:
-                    signals = components["signals"].generate_signals(markets=market_selection)
-
-                    for market, market_signals in signals.items():
-                        if market_signals:
-                            flag = {"US": "🇺🇸", "DE": "🇩🇪", "IN": "🇮🇳"}.get(market, "🌐")
-                            market_name = MARKETS[market].name if hasattr(MARKETS[market], 'name') else market
-                            st.markdown(f"### {flag} {market_name} - {len(market_signals)} Signals")
-
-                            # Build dataframe with safe key access
-                            df_data = []
-                            for sig in market_signals:
-                                df_data.append({
-                                    "symbol": sig.get('symbol', 'N/A'),
-                                    "name": sig.get('name', 'N/A'),
-                                    "signal_status": sig.get('signal_status', 'N/A'),
-                                    "signal_score": sig.get('signal_score', 0),
-                                    "current_price": sig.get('current_price', 0),
-                                    "ideal_entry": get_entry_price(sig),
-                                    "stop_loss": sig.get('stop_loss', 0),
-                                    "target_1": sig.get('target_1', 0),
-                                    "risk_reward": get_risk_reward(sig),
-                                })
-
-                            df = pd.DataFrame(df_data)
-                            st.dataframe(df, use_container_width=True)
+                    journal = TradeJournal()
+                    trade_id = journal.log_entry(
+                        symbol=q_symbol,
+                        entry_price=q_entry,
+                        shares=q_shares,
+                        stop_loss=q_stop,
+                        target_1=q_target,
+                        target_2=q_target * 1.1,
+                        setup_type=q_setup
+                    )
+                    st.success(f"✅ Trade #{trade_id} logged!")
+                    st.balloons()
                 except Exception as e:
-                    st.error(f"Error generating signals: {e}")
+                    st.error(f"Error: {e}")
+            else:
+                st.error("Trade journal not available")
+
+    # Quick Performance View
+    with st.expander("📊 Quick Performance", expanded=False):
+        if HAS_JOURNAL:
+            try:
+                journal = TradeJournal()
+                stats = journal.get_stats(30)
+
+                if stats.get('total_trades', 0) > 0:
+                    pc1, pc2, pc3, pc4 = st.columns(4)
+                    pc1.metric("Trades", stats['total_trades'])
+                    pc2.metric("Win Rate", f"{stats['win_rate']:.1f}%")
+                    pc3.metric("Total P&L", f"${stats['total_pnl']:+,.2f}")
+                    pc4.metric("Avg R", f"{stats['avg_r']:+.2f}")
+                else:
+                    st.info("No closed trades in last 30 days")
+            except:
+                st.info("No trade data yet")
         else:
-            st.warning("Signal generator not available. Check if global_signal_generator.py exists.")
+            st.warning("trade_journal.py not found")
+
+    # Refresh Data
+    with st.expander("🔄 Refresh Data", expanded=False):
+        st.write("Clear cached data and refresh:")
+        if st.button("🔄 Clear Cache & Refresh", key="refresh_btn"):
+            st.cache_data.clear()
+            st.success("✅ Cache cleared! Data will refresh on next load.")
 
 
 # ═══════════════════════════════════════════════════════════════
-# SIGNALS PAGE
+# PAGE: SIGNALS
 # ═══════════════════════════════════════════════════════════════
 
-elif page == "🎯 Signals":
+elif st.session_state.current_page == "🎯 Signals":
     st.title("🎯 Trading Signals")
 
-    col1, col2 = st.columns([2, 1])
+    # Market regime warning
+    if 'regime' in comp:
+        try:
+            conditions = comp['regime'].analyze()
+            if not conditions.can_trade_long:
+                st.error(f"⚠️ MARKET WARNING: {conditions.recommendation}")
+            elif conditions.position_mult < 1.0:
+                st.warning(f"⚠️ {conditions.recommendation}")
+        except:
+            pass
+
+    # Controls
+    col1, col2, col3 = st.columns([2, 1, 1])
 
     with col1:
         markets = st.multiselect(
@@ -442,412 +614,554 @@ elif page == "🎯 Signals":
         )
 
     with col2:
-        signal_type = st.selectbox(
-            "Signal Type",
-            ["All", "STRONG BUY", "BUY"]
+        signal_filter = st.selectbox(
+            "Filter",
+            ["All", "STRONG BUY", "BUY"],
+            key="signal_filter"
         )
 
-    if st.button("🚀 Generate Signals", type="primary"):
-        if components["signals"]:
-            with st.spinner("Analyzing markets..."):
+    with col3:
+        min_score = st.slider("Min Score", 0, 100, 50, key="min_score")
+
+    # Auto-trigger signals if coming from Quick Actions
+    auto_generate = st.session_state.get('trigger_signals', False)
+    if auto_generate:
+        st.session_state.trigger_signals = False
+
+    # Generate button
+    generate_clicked = st.button("🚀 Generate Signals", type="primary", use_container_width=True)
+
+    if generate_clicked or auto_generate:
+        if 'signals' in comp:
+            with st.spinner("Analyzing markets... This may take a minute."):
                 try:
-                    signals = components["signals"].generate_signals(markets=markets)
+                    all_signals = comp['signals'].generate_signals(markets=markets)
 
-                    for market, market_signals in signals.items():
+                    total_found = 0
+
+                    for market, market_signals in all_signals.items():
                         if not market_signals:
                             continue
 
-                        # Filter by signal type
-                        if signal_type != "All":
-                            market_signals = [s for s in market_signals if s.get("signal_status") == signal_type]
+                        # Apply filters
+                        if signal_filter != "All":
+                            market_signals = [s for s in market_signals
+                                            if s.get('signal_status') == signal_filter]
+
+                        market_signals = [s for s in market_signals
+                                         if s.get('signal_score', 0) >= min_score]
 
                         if not market_signals:
                             continue
+
+                        # Sort by score
+                        market_signals.sort(key=lambda x: x.get('signal_score', 0), reverse=True)
 
                         flag = {"US": "🇺🇸", "DE": "🇩🇪", "IN": "🇮🇳"}.get(market, "🌐")
                         currency = {"US": "$", "DE": "€", "IN": "₹"}.get(market, "$")
-                        market_name = MARKETS[market].name if hasattr(MARKETS[market], 'name') else market
 
-                        st.markdown(f"## {flag} {market_name}")
+                        st.markdown(f"### {flag} {market} - {len(market_signals)} signals")
 
-                        for i, sig in enumerate(market_signals[:5]):
-                            signal_icon = '🟢' if sig.get('signal_status') == 'STRONG BUY' else '🟡'
+                        total_found += len(market_signals)
 
-                            with st.expander(f"{signal_icon} {sig.get('symbol', 'N/A')} - "
-                                           f"{sig.get('signal_status', 'N/A')} (Score: {sig.get('signal_score', 0)})"):
+                        # Display signals
+                        for sig in market_signals[:10]:
+                            status = sig.get('signal_status', 'N/A')
+                            score = sig.get('signal_score', 0)
+                            symbol = sig.get('symbol', 'N/A')
 
-                                col1, col2, col3 = st.columns(3)
+                            icon = "🟢" if status == "STRONG BUY" else "🟡"
 
-                                with col1:
+                            with st.expander(f"{icon} {symbol} - {status} (Score: {score})"):
+                                c1, c2, c3 = st.columns(3)
+
+                                with c1:
                                     st.markdown("**📊 Current**")
                                     st.write(f"Price: {currency}{sig.get('current_price', 0):,.2f}")
                                     st.write(f"RSI: {sig.get('rsi', 0):.1f}")
-                                    trend_status = is_uptrend(sig)
-                                    st.write(f"Trend: {'✅ UP' if trend_status else '❌ DOWN'}")
+                                    st.write(f"ADX: {sig.get('adx', 0):.1f}")
 
-                                with col2:
+                                with c2:
                                     st.markdown("**💰 Trade Setup**")
-                                    st.write(f"Entry: {currency}{get_entry_price(sig):,.2f}")
+                                    entry = get_entry_price(sig)
+                                    st.write(f"Entry: {currency}{entry:,.2f}")
                                     st.write(f"Stop: {currency}{sig.get('stop_loss', 0):,.2f}")
-                                    st.write(f"Target: {currency}{sig.get('target_1', 0):,.2f}")
+                                    st.write(f"Target 1: {currency}{sig.get('target_1', 0):,.2f}")
 
-                                with col3:
-                                    st.markdown("**📈 Risk/Reward**")
-                                    st.write(f"R:R: {get_risk_reward(sig):.2f}")
+                                with c3:
+                                    st.markdown("**📈 Metrics**")
+                                    rr = get_risk_reward(sig)
+                                    st.write(f"R:R: {rr:.2f}:1")
                                     st.write(f"Setup: {sig.get('setup_type', 'N/A')}")
-                                    st.write(f"ATR%: {get_atr_pct(sig):.2f}%")
+
+                                # Position size
+                                if 'regime' in comp:
+                                    mult = comp['regime'].analyze().position_mult
+                                else:
+                                    mult = 1.0
+
+                                entry = get_entry_price(sig)
+                                stop = sig.get('stop_loss', 0)
+
+                                if entry > 0 and stop > 0 and stop < entry:
+                                    risk_per_share = entry - stop
+                                    risk_amount = ACCOUNT_SIZE * RISK_PER_TRADE * mult
+                                    shares = int(risk_amount / risk_per_share)
+
+                                    st.markdown("---")
+                                    st.markdown(f"**💼 Position:** Buy **{shares}** shares = {currency}{shares * entry:,.2f}")
+
+                        st.markdown("---")
+
+                    if total_found == 0:
+                        st.info("No signals matching criteria. Try adjusting filters.")
+                    else:
+                        st.success(f"✅ Found {total_found} signals")
+
                 except Exception as e:
-                    st.error(f"Error: {e}")
+                    st.error(f"Error generating signals: {e}")
         else:
-            st.warning("Signal generator not available.")
+            st.error("Signal generator not available")
+    else:
+        st.info("👆 Click 'Generate Signals' to scan markets")
 
 
 # ═══════════════════════════════════════════════════════════════
-# ANALYSIS PAGE
+# PAGE: ANALYSIS
 # ═══════════════════════════════════════════════════════════════
 
-elif page == "📈 Analysis":
+elif st.session_state.current_page == "📈 Analysis":
     st.title("📈 Stock Analysis")
 
-    col1, col2 = st.columns([2, 1])
+    col1, col2 = st.columns([3, 1])
 
     with col1:
-        symbol = st.text_input(
-            "Enter Symbol",
-            value="NVDA",
-            help="US: NVDA, AAPL | Germany: SAP.DE | India: TCS.NS"
-        ).upper()
+        symbol = st.text_input("Enter Symbol", value="NVDA").upper()
 
     with col2:
-        st.markdown("**Examples:**")
-        st.markdown("🇺🇸 NVDA, AAPL, MSFT")
-        st.markdown("🇩🇪 SAP.DE, BMW.DE")
-        st.markdown("🇮🇳 TCS.NS, RELIANCE.NS")
+        st.write("")
+        st.write("")
+        if ".NS" in symbol:
+            st.info("🇮🇳 India")
+            currency = "₹"
+        elif ".DE" in symbol:
+            st.info("🇩🇪 Germany")
+            currency = "€"
+        else:
+            st.info("🇺🇸 US")
+            currency = "$"
 
     if st.button("🔍 Analyze", type="primary"):
         with st.spinner(f"Analyzing {symbol}..."):
-            # Get data
-            df = None
-            if components["fetcher"]:
-                try:
-                    df = components["fetcher"].get_stock_data(symbol, "6mo")
-                except:
-                    df = fetch_stock_data_direct(symbol, "6mo")
-            else:
-                df = fetch_stock_data_direct(symbol, "6mo")
+            df = fetch_stock_data(symbol, "6mo")
 
-            if df is None or df.empty:
+            if df.empty:
                 st.error(f"No data found for {symbol}")
             else:
-                # Get info
-                info = {}
-                if components["fetcher"]:
-                    try:
-                        info = components["fetcher"].get_stock_info(symbol)
-                    except:
-                        pass
+                info = get_stock_info(symbol)
 
-                # Analyze
-                result = {}
-                if components["analyzer"]:
+                if 'analyzer' in comp:
                     try:
-                        result = components["analyzer"].analyze_stock(df, symbol)
+                        result = comp['analyzer'].analyze_stock(df, symbol)
                     except Exception as e:
                         st.error(f"Analysis error: {e}")
-                        result = {"symbol": symbol, "error": str(e)}
-
-                if result.get("error"):
-                    st.error(f"Error: {result['error']}")
+                        result = {}
                 else:
-                    # Detect market
-                    if ".DE" in symbol:
-                        market = "DE"
-                        currency = "€"
-                        flag = "🇩🇪"
-                    elif ".NS" in symbol:
-                        market = "IN"
-                        currency = "₹"
-                        flag = "🇮🇳"
+                    st.warning("Analyzer not available")
+                    result = {}
+
+                if result:
+                    st.markdown(f"## {info.get('name', symbol)}")
+                    st.caption(f"{info.get('sector', 'N/A')} | {info.get('industry', 'N/A')}")
+
+                    status = result.get('signal_status', 'N/A')
+                    if status == "STRONG BUY":
+                        st.success(f"🟢 **{status}** - Score: {result.get('signal_score', 0)}/100")
+                    elif status == "BUY":
+                        st.warning(f"🟡 **{status}** - Score: {result.get('signal_score', 0)}/100")
                     else:
-                        market = "US"
-                        currency = "$"
-                        flag = "🇺🇸"
+                        st.info(f"⚪ **{status}** - Score: {result.get('signal_score', 0)}/100")
 
-                    market_info = MARKETS.get(market)
-                    market_name = market_info.name if hasattr(market_info, 'name') else market
-
-                    # Header
-                    st.markdown(f"## {flag} {info.get('name', symbol)}")
-                    st.markdown(f"**Sector:** {info.get('sector', 'N/A')} | "
-                               f"**Market:** {market_name} | "
-                               f"**Currency:** {currency}")
-
-                    # Metrics
                     col1, col2, col3, col4 = st.columns(4)
                     col1.metric("Price", f"{currency}{result.get('current_price', 0):,.2f}")
-                    col2.metric("Signal", result.get('signal_status', 'N/A'))
-                    col3.metric("Score", f"{result.get('signal_score', 0)}/100")
-                    col4.metric("R:R Ratio", f"{get_risk_reward(result):.2f}")
+                    col2.metric("RSI", f"{result.get('rsi', 0):.1f}")
+                    rr = get_risk_reward(result)
+                    col3.metric("R:R", f"{rr:.2f}:1")
+                    col4.metric("Setup", result.get('setup_type', 'N/A'))
 
                     st.markdown("---")
 
-                    # Trade setup
                     col1, col2 = st.columns(2)
 
                     with col1:
                         st.markdown("### 💰 Trade Setup")
-
                         entry = get_entry_price(result)
-                        stop = result.get('stop_loss', 0)
-                        target1 = result.get('target_1', 0)
-                        target2 = result.get('target_2', 0)
-                        current = result.get('current_price', 0)
-
-                        # Calculate percentages
-                        stop_pct = ((stop - current) / current * 100) if current else 0
-                        t1_pct = ((target1 - current) / current * 100) if current else 0
-                        t2_pct = ((target2 - current) / current * 100) if current else 0
-
-                        setup_data = {
-                            "Level": ["Entry", "Stop Loss", "Target 1", "Target 2"],
-                            "Price": [
-                                f"{currency}{entry:,.2f}",
-                                f"{currency}{stop:,.2f}",
-                                f"{currency}{target1:,.2f}",
-                                f"{currency}{target2:,.2f}",
-                            ],
-                            "Change": [
-                                "-",
-                                f"{stop_pct:.1f}%",
-                                f"+{t1_pct:.1f}%",
-                                f"+{t2_pct:.1f}%",
-                            ]
-                        }
-                        st.table(pd.DataFrame(setup_data))
+                        st.write(f"**Entry:** {currency}{entry:,.2f}")
+                        st.write(f"**Stop Loss:** {currency}{result.get('stop_loss', 0):,.2f}")
+                        st.write(f"**Target 1:** {currency}{result.get('target_1', 0):,.2f}")
+                        st.write(f"**Target 2:** {currency}{result.get('target_2', 0):,.2f}")
 
                     with col2:
                         st.markdown("### 📊 Indicators")
-
-                        trend_status = is_uptrend(result)
-
-                        indicators = {
-                            "Indicator": ["RSI", "ADX", "ATR%", "Rel Volume", "Setup Type", "Trend"],
-                            "Value": [
-                                f"{result.get('rsi', 0):.1f}",
-                                f"{result.get('adx', 0):.1f}",
-                                f"{get_atr_pct(result):.2f}%",
-                                f"{get_rel_volume(result):.2f}",
-                                result.get('setup_type', 'N/A'),
-                                "BULLISH ✅" if trend_status else "BEARISH ❌",
-                            ]
-                        }
-                        st.table(pd.DataFrame(indicators))
+                        st.write(f"**RSI:** {result.get('rsi', 0):.1f}")
+                        st.write(f"**ADX:** {result.get('adx', 0):.1f}")
+                        atr = result.get('atr_pct', result.get('atr_percent', 0))
+                        st.write(f"**ATR%:** {atr:.2f}%")
+                        trend = is_uptrend(result)
+                        st.write(f"**Trend:** {'📈 BULLISH' if trend else '📉 BEARISH'}")
 
 
 # ═══════════════════════════════════════════════════════════════
-# SCANNER PAGE
+# PAGE: TRADE JOURNAL
 # ═══════════════════════════════════════════════════════════════
 
-elif page == "🔍 Scanner":
-    st.title("🔍 Global Stock Scanner")
+elif st.session_state.current_page == "📋 Trade Journal":
+    st.title("📋 Trade Journal")
 
-    markets = st.multiselect(
-        "Select Markets to Scan",
-        ["US", "DE", "IN"],
-        default=["US", "DE", "IN"],
-        key="scanner_markets"
-    )
+    if not HAS_JOURNAL or 'journal' not in comp:
+        st.error("❌ Trade Journal not available")
+        st.code("Create trade_journal.py to enable this feature")
+        st.stop()
 
-    top_n = st.slider("Top stocks per market", 5, 30, 15)
+    journal = comp['journal']
 
-    if st.button("🔍 Run Scanner", type="primary"):
-        if components["universe"]:
-            with st.spinner("Scanning markets..."):
+    tab1, tab2, tab3, tab4 = st.tabs(["📝 Log Entry", "📤 Log Exit", "📂 Open", "📜 History"])
+
+    with tab1:
+        st.subheader("Log New Trade Entry")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            entry_symbol = st.text_input("Symbol", "NVDA", key="j_symbol").upper()
+            entry_price = st.number_input("Entry Price", value=100.0, step=0.01, key="j_entry")
+            entry_shares = st.number_input("Shares", value=10, step=1, key="j_shares")
+            entry_market = st.selectbox("Market", ["US", "DE", "IN"], key="j_market")
+
+        with col2:
+            entry_stop = st.number_input("Stop Loss", value=95.0, step=0.01, key="j_stop")
+            entry_t1 = st.number_input("Target 1", value=110.0, step=0.01, key="j_t1")
+            entry_t2 = st.number_input("Target 2", value=120.0, step=0.01, key="j_t2")
+            entry_setup = st.selectbox("Setup", ["PULLBACK", "PULLBACK_BOUNCE", "BREAKOUT", "REVERSAL", "OTHER"], key="j_setup")
+
+        entry_reason = st.text_area("Entry Reason", key="j_reason")
+
+        regime_str = "UNKNOWN"
+        if 'regime' in comp:
+            try:
+                regime_str = comp['regime'].analyze().regime.value
+            except:
+                pass
+
+        if entry_price > 0 and entry_stop > 0 and entry_stop < entry_price:
+            risk = (entry_price - entry_stop) * entry_shares
+            rr = (entry_t1 - entry_price) / (entry_price - entry_stop) if entry_price > entry_stop else 0
+
+            pc1, pc2, pc3 = st.columns(3)
+            pc1.metric("Position Value", f"${entry_price * entry_shares:,.2f}")
+            pc2.metric("Risk Amount", f"${risk:,.2f}")
+            pc3.metric("R:R", f"{rr:.2f}:1")
+
+        if st.button("✅ Log Entry", type="primary", key="btn_entry"):
+            if entry_price > 0 and entry_shares > 0 and entry_stop > 0:
                 try:
-                    components["universe"].rank_stocks(markets=markets, top_n_per_market=top_n)
-
-                    for market in markets:
-                        df = components["universe"].get_market_report(market)
-
-                        if df is None or df.empty:
-                            continue
-
-                        flag = {"US": "🇺🇸", "DE": "🇩🇪", "IN": "🇮🇳"}.get(market, "🌐")
-                        market_name = MARKETS[market].name if hasattr(MARKETS[market], 'name') else market
-
-                        st.markdown(f"## {flag} {market_name}")
-
-                        display_cols = ["symbol", "name", "sector", "price", "composite_score",
-                                       "momentum_20d", "momentum_5d", "returns_3m", "rel_volume"]
-
-                        available_cols = [c for c in display_cols if c in df.columns]
-                        st.dataframe(df.head(top_n)[available_cols], use_container_width=True)
+                    trade_id = journal.log_entry(
+                        symbol=entry_symbol,
+                        entry_price=entry_price,
+                        shares=entry_shares,
+                        stop_loss=entry_stop,
+                        target_1=entry_t1,
+                        target_2=entry_t2,
+                        setup_type=entry_setup,
+                        entry_reason=entry_reason,
+                        market=entry_market,
+                        market_regime=regime_str
+                    )
+                    st.success(f"✅ Trade #{trade_id} logged!")
+                    st.balloons()
                 except Exception as e:
                     st.error(f"Error: {e}")
+
+    with tab2:
+        st.subheader("Log Trade Exit")
+
+        open_trades = journal.get_open_trades()
+
+        if open_trades.empty:
+            st.info("No open trades to close")
         else:
-            st.warning("Universe manager not available.")
+            trade_options = {f"#{row['id']} - {row['symbol']} @ ${row['entry_price']:.2f}": row['id']
+                           for _, row in open_trades.iterrows()}
+
+            selected = st.selectbox("Select Trade", list(trade_options.keys()))
+            trade_id = trade_options[selected]
+
+            trade = open_trades[open_trades['id'] == trade_id].iloc[0]
+
+            st.info(f"Entry: ${trade['entry_price']:.2f} × {trade['shares']} shares | Stop: ${trade['stop_loss']:.2f}")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                exit_price = st.number_input("Exit Price", value=float(trade['entry_price']), step=0.01)
+                exit_reason = st.selectbox("Exit Reason", [
+                    "Target 1 Hit", "Target 2 Hit", "Stop Loss", "Trailing Stop", "Manual Exit"
+                ])
+
+            with col2:
+                followed_plan = st.checkbox("Followed Plan?", value=True)
+                exit_lessons = st.text_area("Lessons Learned")
+
+            pnl = (exit_price - trade['entry_price']) * trade['shares']
+            risk_per_share = trade['entry_price'] - trade['stop_loss']
+            r_mult = (exit_price - trade['entry_price']) / risk_per_share if risk_per_share else 0
+
+            pc1, pc2 = st.columns(2)
+            pc1.metric("P&L", f"${pnl:+,.2f}")
+            pc2.metric("R-Multiple", f"{r_mult:+.2f}R")
+
+            if st.button("📤 Close Trade", type="primary"):
+                try:
+                    result = journal.log_exit(
+                        trade_id=trade_id,
+                        exit_price=exit_price,
+                        exit_reason=exit_reason,
+                        followed_plan=followed_plan,
+                        lessons=exit_lessons
+                    )
+
+                    if result['pnl'] > 0:
+                        st.success(f"✅ Win! P&L: ${result['pnl']:+,.2f}")
+                        st.balloons()
+                    else:
+                        st.error(f"❌ Loss: ${result['pnl']:+,.2f}")
+
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+    with tab3:
+        st.subheader("📂 Open Positions")
+
+        open_trades = journal.get_open_trades()
+
+        if open_trades.empty:
+            st.info("No open positions")
+        else:
+            st.dataframe(open_trades, use_container_width=True, hide_index=True)
+
+    with tab4:
+        st.subheader("📜 Trade History")
+
+        days = st.selectbox("Period", [7, 14, 30, 60, 90], index=2, key="hist_days")
+        stats = journal.get_stats(days)
+
+        if stats.get('total_trades', 0) == 0:
+            st.info(f"No closed trades in last {days} days")
+        else:
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Trades", stats['total_trades'])
+            col2.metric("Win Rate", f"{stats['win_rate']:.1f}%")
+            col3.metric("Total P&L", f"${stats['total_pnl']:+,.2f}")
+            col4.metric("Profit Factor", f"{stats['profit_factor']:.2f}")
+
+            st.markdown("---")
+
+            setup_df = journal.get_stats_by_setup()
+            if not setup_df.empty:
+                st.subheader("By Setup Type")
+                st.dataframe(setup_df, use_container_width=True, hide_index=True)
 
 
 # ═══════════════════════════════════════════════════════════════
-# BACKTEST PAGE
+# PAGE: PERFORMANCE
 # ═══════════════════════════════════════════════════════════════
 
-elif page == "📉 Backtest":
+elif st.session_state.current_page == "📊 Performance":
+    st.title("📊 Performance Tracker")
+
+    if not HAS_JOURNAL or 'journal' not in comp:
+        st.error("Trade Journal required")
+        st.stop()
+
+    journal = comp['journal']
+
+    # Monthly Progress
+    st.subheader(f"📅 {datetime.now().strftime('%B %Y')} Progress")
+
+    if 'tracker' in comp:
+        try:
+            p = comp['tracker'].get_monthly_progress()
+
+            pct = min(p.get('progress_pct', 0), 100)
+            st.progress(pct / 100)
+
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Target", f"${p.get('target', 0):,.0f}")
+            col2.metric("Current P&L", f"${p.get('current_pnl', 0):+,.2f}")
+            col3.metric("Progress", f"{pct:.1f}%")
+
+            col4, col5, col6 = st.columns(3)
+            col4.metric("Remaining", f"${p.get('remaining', 0):,.2f}")
+            col5.metric("Trading Days Left", p.get('trading_days_left', 0))
+            col6.metric("Status", "✅ On Track" if p.get('on_track') else "⚠️ Behind")
+
+        except:
+            st.info("Start trading to see progress")
+
+    st.markdown("---")
+
+    # Performance Stats
+    st.subheader("📈 Statistics")
+
+    period = st.selectbox("Period", [7, 14, 30, 60, 90], index=2, key="perf_period")
+    stats = journal.get_stats(period)
+
+    if stats.get('total_trades', 0) == 0:
+        st.info(f"No closed trades in last {period} days")
+    else:
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Total P&L", f"${stats['total_pnl']:+,.2f}")
+        col2.metric("Win Rate", f"{stats['win_rate']:.1f}%")
+        col3.metric("Profit Factor", f"{stats['profit_factor']:.2f}")
+        col4.metric("Avg R", f"{stats['avg_r']:+.2f}")
+
+        col5, col6, col7, col8 = st.columns(4)
+        col5.metric("Trades", stats['total_trades'])
+        col6.metric("Winners", stats['wins'])
+        col7.metric("Losers", stats['losses'])
+        col8.metric("Avg Hold", f"{stats['avg_hold']:.1f} days")
+
+
+# ═══════════════════════════════════════════════════════════════
+# PAGE: SCANNER
+# ═══════════════════════════════════════════════════════════════
+
+elif st.session_state.current_page == "🔍 Scanner":
+    st.title("🔍 Stock Scanner")
+    st.info("Use the 🎯 Signals page for market scanning")
+
+    if st.button("Go to Signals", type="primary"):
+        st.session_state.current_page = "🎯 Signals"
+        st.rerun()
+
+
+# ═══════════════════════════════════════════════════════════════
+# PAGE: BACKTEST
+# ═══════════════════════════════════════════════════════════════
+
+elif st.session_state.current_page == "📉 Backtest":
     st.title("📉 Strategy Backtester")
 
-    symbols_input = st.text_area(
-        "Symbols (one per line)",
-        "NVDA\nAAPL\nMSFT\nSAP.DE\nTCS.NS",
-        height=150
-    )
-
-    col1, col2 = st.columns(2)
-    with col1:
-        period = st.selectbox("Period", ["6mo", "1y", "2y"], index=1)
-    with col2:
-        initial_capital = st.number_input("Initial Capital ($)", value=50000, step=5000)
-
-    if st.button("🚀 Run Backtest", type="primary"):
-        symbols = [s.strip().upper() for s in symbols_input.split("\n") if s.strip()]
-
-        if components["backtester"]:
-            with st.spinner("Running backtest..."):
-                try:
-                    bt = Backtester(capital=initial_capital) if Backtester else None
-
-                    if bt:
-                        results = bt.run(symbols, period)
-
-                        # Results
-                        col1, col2, col3, col4 = st.columns(4)
-                        col1.metric("Total P&L", f"${results.total_pnl:,.2f}")
-                        col2.metric("Win Rate", f"{results.win_rate:.1f}%")
-                        col3.metric("Profit Factor", f"{results.profit_factor:.2f}")
-                        col4.metric("Max Drawdown", f"{results.max_drawdown:.1f}%")
-
-                        # Trade details
-                        if hasattr(results, 'trades') and results.trades:
-                            st.markdown("### Trade Details")
-                            trades_data = [{
-                                "Symbol": t.symbol,
-                                "Entry": f"${t.entry_price:.2f}",
-                                "Exit": f"${t.exit_price:.2f}",
-                                "P&L": f"${t.pnl:.2f}",
-                                "Return": f"{t.pnl_pct:.1f}%",
-                                "Reason": t.exit_reason,
-                            } for t in results.trades]
-                            st.dataframe(pd.DataFrame(trades_data), use_container_width=True)
-                except Exception as e:
-                    st.error(f"Backtest error: {e}")
-        else:
-            st.warning("Backtester not available.")
-            st.info("Run from command line: `python backtester.py compare`")
+    st.code("""
+# Run from command line:
+python backtester.py compare
+python backtester.py --market US
+python backtester.py --symbol NVDA --period 1y
+    """, language="bash")
 
 
 # ═══════════════════════════════════════════════════════════════
-# CALCULATOR PAGE
+# PAGE: CALCULATOR
 # ═══════════════════════════════════════════════════════════════
 
-elif page == "📐 Calculator":
+elif st.session_state.current_page == "📐 Calculator":
     st.title("📐 Position Size Calculator")
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("### Trade Details")
+        st.subheader("Trade Details")
         currency = st.selectbox("Currency", ["USD ($)", "EUR (€)", "INR (₹)"])
-        entry = st.number_input("Entry Price", value=100.0, step=1.0)
-        stop = st.number_input("Stop Loss", value=95.0, step=1.0)
+        entry = st.number_input("Entry Price", value=100.0, step=0.01)
+        stop = st.number_input("Stop Loss", value=95.0, step=0.01)
+        target = st.number_input("Target", value=110.0, step=0.01)
 
     with col2:
-        st.markdown("### Account Details")
-        account = st.number_input("Account Size", value=50000.0, step=1000.0)
-        risk_pct = st.slider("Risk %", 0.5, 3.0, 1.5, 0.1)
+        st.subheader("Account")
+        account = st.number_input("Account Size", value=ACCOUNT_SIZE, step=1000)
+        risk_pct = st.slider("Risk %", 0.5, 3.0, RISK_PER_TRADE * 100, 0.1)
+
+        if 'regime' in comp:
+            try:
+                mult = comp['regime'].analyze().position_mult
+                st.info(f"Regime adjustment: {mult*100:.0f}%")
+                effective_risk = risk_pct * mult
+            except:
+                effective_risk = risk_pct
+        else:
+            effective_risk = risk_pct
 
     if st.button("📊 Calculate", type="primary"):
-        risk_per_share = entry - stop
-
-        if risk_per_share > 0:
-            max_risk = account * (risk_pct / 100)
+        if stop >= entry:
+            st.error("Stop must be below entry")
+        else:
+            risk_per_share = entry - stop
+            max_risk = account * (effective_risk / 100)
             shares = int(max_risk / risk_per_share)
-            value = shares * entry
+            position_value = shares * entry
 
-            curr_symbol = {"USD ($)": "$", "EUR (€)": "€", "INR (₹)": "₹"}.get(currency, "$")
+            rr_ratio = (target - entry) / risk_per_share
+            profit = (target - entry) * shares
+
+            curr_sym = {"USD ($)": "$", "EUR (€)": "€", "INR (₹)": "₹"}.get(currency, "$")
+
+            st.markdown("---")
 
             col1, col2, col3 = st.columns(3)
-            col1.metric("Shares to Buy", f"{shares:,}")
-            col2.metric("Position Value", f"{curr_symbol}{value:,.2f}")
-            col3.metric("Risk Amount", f"{curr_symbol}{max_risk:,.2f}")
+            col1.metric("Shares", f"{shares:,}")
+            col2.metric("Position Value", f"{curr_sym}{position_value:,.2f}")
+            col3.metric("Risk Amount", f"{curr_sym}{max_risk:,.2f}")
 
-            st.success(f"Buy {shares} shares at {curr_symbol}{entry:.2f} with stop at {curr_symbol}{stop:.2f}")
-        else:
-            st.error("Stop loss must be below entry price")
+            col4, col5, col6 = st.columns(3)
+            col4.metric("R:R Ratio", f"{rr_ratio:.2f}:1")
+            col5.metric("Potential Profit", f"{curr_sym}{profit:,.2f}")
+            col6.metric("Risk %", f"{effective_risk:.2f}%")
+
+            st.success(f"**Buy {shares} shares** at {curr_sym}{entry:.2f}, stop at {curr_sym}{stop:.2f}")
 
 
 # ═══════════════════════════════════════════════════════════════
-# UNIVERSE PAGE
+# PAGE: SETTINGS
 # ═══════════════════════════════════════════════════════════════
 
-elif page == "⚙️ Universe":
-    st.title("⚙️ Universe Management")
+elif st.session_state.current_page == "⚙️ Settings":
+    st.title("⚙️ Settings")
 
-    tab1, tab2 = st.tabs(["📋 View Universe", "🔄 Update Universe"])
+    st.subheader("📋 Configuration")
+    st.write(f"**Account Size:** ${ACCOUNT_SIZE:,}")
+    st.write(f"**Monthly Target:** {MONTHLY_TARGET*100:.1f}%")
+    st.write(f"**Risk per Trade:** {RISK_PER_TRADE*100:.1f}%")
+    st.write(f"**Max Positions:** {MAX_POSITIONS}")
 
-    with tab1:
-        if components["universe"]:
-            try:
-                universe = components["universe"].load_universe()
+    st.caption("Edit config.py to change these settings")
 
-                if universe:
-                    for market, symbols in universe.items():
-                        flag = {"US": "🇺🇸", "DE": "🇩🇪", "IN": "🇮🇳"}.get(market, "🌐")
-                        market_name = MARKETS[market].name if hasattr(MARKETS[market], 'name') else market
+    st.markdown("---")
 
-                        with st.expander(f"{flag} {market_name} - {len(symbols)} stocks"):
-                            cols = st.columns(4)
-                            for i, symbol in enumerate(symbols):
-                                cols[i % 4].write(symbol)
-                else:
-                    st.warning("No universe found. Click 'Update Universe' to create one.")
-            except Exception as e:
-                st.error(f"Error loading universe: {e}")
-        else:
-            st.warning("Universe manager not available.")
+    st.subheader("🔧 System Status")
 
-    with tab2:
-        markets = st.multiselect(
-            "Markets to Update",
-            ["US", "DE", "IN"],
-            default=["US", "DE", "IN"],
-            key="update_markets"
-        )
+    modules = [
+        ("Data Fetcher", HAS_FETCHER),
+        ("Analyzer", HAS_ANALYZER),
+        ("Signals", HAS_SIGNALS),
+        ("Trade Journal", HAS_JOURNAL),
+        ("Market Regime", HAS_REGIME),
+        ("Performance", HAS_TRACKER),
+        ("yfinance", HAS_YFINANCE),
+    ]
 
-        top_n = st.slider("Top stocks per market", 10, 30, 20, key="update_top")
+    for name, status in modules:
+        st.write(f"{'✅' if status else '❌'} {name}")
 
-        if components["universe"]:
-            col1, col2 = st.columns(2)
+    st.markdown("---")
 
-            with col1:
-                if st.button("⚡ Quick Update (Faster)", type="secondary"):
-                    with st.spinner("Updating universe..."):
-                        try:
-                            components["universe"].quick_update(markets=markets, top_n_per_market=min(top_n, 15))
-                            st.success("Universe updated!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error: {e}")
+    st.subheader("🔄 Maintenance")
 
-            with col2:
-                if st.button("🔄 Full Update (More Thorough)", type="primary"):
-                    with st.spinner("Updating universe (this may take a while)..."):
-                        try:
-                            components["universe"].update_universe(markets=markets, top_n_per_market=top_n)
-                            st.success("Universe updated!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error: {e}")
-        else:
-            st.warning("Universe manager not available.")
+    if st.button("Clear Cache"):
+        st.cache_data.clear()
+        st.cache_resource.clear()
+        st.success("Cache cleared!")
+        st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -855,4 +1169,4 @@ elif page == "⚙️ Universe":
 # ═══════════════════════════════════════════════════════════════
 
 st.sidebar.markdown("---")
-st.sidebar.markdown(f"*Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}*")
+st.sidebar.caption(f"Updated: {datetime.now().strftime('%H:%M')}")
