@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
 """
+⚠️ DEPRECATED - Bootstrap Script
+
 Complete Trading System Setup Script
 Creates all necessary files for the swing trading system
+
+This script is for initial project setup only.
+The trading system is already set up in your workspace.
+
+Use this script only if you want to recreate the project from scratch.
+Otherwise, use the global_* modules directly.
 """
 
 import os

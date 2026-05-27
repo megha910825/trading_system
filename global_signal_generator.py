@@ -81,7 +81,8 @@ class GlobalSignalGenerator:
                     signal = self._analyze_symbol(symbol)
                     if signal and signal.get("signal_status") in ["STRONG BUY", "BUY"]:
                         market_signals.append(signal)
-                except:
+                except Exception as e:
+                    print(f"Warning: Error analyzing {symbol}: {e}")
                     continue
 
             print()

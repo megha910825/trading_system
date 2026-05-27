@@ -6,12 +6,12 @@ Debug Script - See why no signals are being generated
 import sys
 sys.path.insert(0, '.')
 
-from data_fetcher import DataFetcher
+from global_data_fetcher import GlobalDataFetcher
 from technical_analyzer import TechnicalAnalyzer
 import config
 
 def debug_signals():
-    fetcher = DataFetcher()
+    fetcher = GlobalDataFetcher()
     analyzer = TechnicalAnalyzer()
 
     # Test with a few popular stocks

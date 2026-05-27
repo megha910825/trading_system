@@ -136,7 +136,8 @@ class GlobalDataFetcher:
                 return price, currency
 
             return 0.0, "USD"
-        except:
+        except Exception as e:
+            print(f"Warning: Could not get price for {symbol}: {e}")
             return 0.0, "USD"
 
     def get_market_summary(self, market: str = "US") -> Dict:
@@ -163,8 +164,8 @@ class GlobalDataFetcher:
                         "price": round(current, 2),
                         "change_pct": round(change, 2),
                     }
-            except:
-                pass
+            except Exception as e:
+                print(f"Warning: Could not get data for index {idx}: {e}")
 
         return summary
 
@@ -198,8 +199,9 @@ class GlobalDataFetcher:
                         rates["EUR"] = rate  # EUR/USD
                     elif currency == "INR":
                         rates["INR"] = 1 / rate  # USD/INR -> INR/USD
-            except:
+            except Exception as e:
                 # Use defaults
+                print(f"Warning: Could not get exchange rate for {currency}: {e}")
                 rates["EUR"] = 1.08
                 rates["INR"] = 0.012
 

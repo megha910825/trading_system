@@ -203,6 +203,21 @@ class TradeJournal:
         conn.close()
         return df
 
+    def get_closed_trades(self) -> pd.DataFrame:
+        """Get closed trades"""
+        conn = sqlite3.connect(self.db_path)
+        df = pd.read_sql_query(
+            """SELECT id, symbol, market, direction, entry_date, entry_price,
+                      exit_date, exit_price, shares, position_value,
+                      stop_loss, target_1, setup_type, exit_reason,
+                      pnl, pnl_pct, r_multiple, holding_days
+               FROM trades WHERE exit_date IS NOT NULL
+               ORDER BY exit_date DESC""",
+            conn
+        )
+        conn.close()
+        return df
+
     def get_stats(self, days: int = 30) -> Dict:
         """Get performance stats"""
         conn = sqlite3.connect(self.db_path)

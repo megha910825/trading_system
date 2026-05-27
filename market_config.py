@@ -22,6 +22,10 @@ class MarketInfo:
     open_time: str
     close_time: str
     suffix: str
+    min_price: float = 5.0
+    max_price: float = 10000.0
+    min_market_cap: float = 1e9
+    min_volume: float = 500000
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -56,6 +60,10 @@ MARKETS: Dict[str, MarketInfo] = {
         open_time="09:30",
         close_time="16:00",
         suffix="",
+        min_price=5.0,
+        max_price=10000.0,
+        min_market_cap=1e9,
+        min_volume=500000,
     ),
     "DE": MarketInfo(
         name="Germany",
@@ -66,6 +74,10 @@ MARKETS: Dict[str, MarketInfo] = {
         open_time="09:00",
         close_time="17:30",
         suffix=".DE",
+        min_price=2.0,
+        max_price=5000.0,
+        min_market_cap=5e8,
+        min_volume=100000,
     ),
     "IN": MarketInfo(
         name="India",
@@ -76,6 +88,10 @@ MARKETS: Dict[str, MarketInfo] = {
         open_time="09:15",
         close_time="15:30",
         suffix=".NS",
+        min_price=10.0,
+        max_price=100000.0,
+        min_market_cap=1e9,
+        min_volume=100000,
     ),
 }
 

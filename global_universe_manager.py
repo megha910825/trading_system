@@ -350,7 +350,7 @@ class GlobalUniverseManager:
         return self.trading_universe
 
     def quick_update(self, markets: List[str] = None,
-                    top_n_per_market: int = 15) -> Dict[str, List[str]]:
+                    top_n_per_market: int = 50) -> Dict[str, List[str]]:
         """
         Quick update with fewer stocks
         """
