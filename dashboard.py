@@ -39,6 +39,177 @@ st.set_page_config(
 )
 
 
+# ── Professional dark-theme CSS ─────────────────────────────────────────────
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..700;1,14..32,300..700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ── Base ──────────────────────────────────────────────────────────── */
+html, body, [class*="css"] { font-family: 'Inter', -apple-system, sans-serif; }
+
+/* ── App background ────────────────────────────────────────────────── */
+.stApp {
+    background-color: #07090f;
+    background-image:
+        radial-gradient(ellipse at 15% 40%, rgba(0,180,216,.04) 0%, transparent 55%),
+        radial-gradient(ellipse at 85% 15%, rgba(0,204,150,.03) 0%, transparent 50%);
+}
+.main .block-container { padding-top: 1.5rem; padding-bottom: 2rem; max-width: 1440px; }
+
+/* ── Sidebar ───────────────────────────────────────────────────────── */
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #0b0f1e 0%, #07090f 100%);
+    border-right: 1px solid rgba(0,180,216,.12);
+}
+section[data-testid="stSidebar"] > div { padding-top: 0.5rem; }
+
+/* ── Metric cards ──────────────────────────────────────────────────── */
+[data-testid="metric-container"] {
+    background: linear-gradient(135deg, #0d1321 0%, #111827 100%);
+    border: 1px solid rgba(0,180,216,.18);
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    transition: border-color .2s, box-shadow .2s;
+}
+[data-testid="metric-container"]:hover {
+    border-color: rgba(0,180,216,.45);
+    box-shadow: 0 0 22px rgba(0,180,216,.1);
+}
+[data-testid="stMetricLabel"] {
+    font-size: .72rem !important; font-weight: 600 !important;
+    text-transform: uppercase !important; letter-spacing: .09em !important;
+    color: #4b5e7a !important;
+}
+[data-testid="stMetricValue"] {
+    font-size: 1.55rem !important; font-weight: 700 !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    color: #e2e8f0 !important;
+}
+[data-testid="stMetricDelta"] { font-size: .8rem !important; font-weight: 500 !important; }
+
+/* ── Buttons ───────────────────────────────────────────────────────── */
+.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, #0077b6 0%, #00b4d8 100%);
+    border: none; border-radius: 8px; color: #fff;
+    font-weight: 600; font-size: .85rem; letter-spacing: .03em;
+    padding: .5rem 1.6rem; transition: all .2s;
+    box-shadow: 0 4px 18px rgba(0,180,216,.28);
+}
+.stButton > button[kind="primary"]:hover {
+    transform: translateY(-1px); box-shadow: 0 6px 24px rgba(0,180,216,.4);
+}
+.stButton > button:not([kind="primary"]) {
+    background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09);
+    border-radius: 8px; color: #94a3b8; font-weight: 500; transition: all .2s;
+}
+.stButton > button:not([kind="primary"]):hover {
+    background: rgba(255,255,255,.09); border-color: rgba(0,180,216,.35); color: #e2e8f0;
+}
+
+/* ── DataFrames ─────────────────────────────────────────────────────── */
+.stDataFrame {
+    border-radius: 12px !important; overflow: hidden !important;
+    border: 1px solid rgba(0,180,216,.13) !important;
+}
+
+/* ── Tabs ───────────────────────────────────────────────────────────── */
+.stTabs [data-baseweb="tab-list"] {
+    background: rgba(13,19,33,.8); border-radius: 10px; padding: 4px; gap: 2px;
+}
+.stTabs [data-baseweb="tab"] {
+    border-radius: 7px; font-weight: 500; font-size: .85rem; color: #64748b;
+}
+.stTabs [aria-selected="true"] {
+    background: linear-gradient(135deg,#0077b6,#00b4d8) !important; color: #fff !important;
+}
+
+/* ── Inputs ─────────────────────────────────────────────────────────── */
+.stTextInput > div > div > input,
+.stNumberInput > div > div > input,
+.stTextArea > div > div > textarea {
+    background: #0d1321 !important; border-color: rgba(0,180,216,.18) !important;
+    border-radius: 8px !important; color: #e2e8f0 !important;
+}
+.stTextInput > div > div > input:focus,
+.stNumberInput > div > div > input:focus,
+.stTextArea > div > div > textarea:focus {
+    border-color: rgba(0,180,216,.55) !important;
+    box-shadow: 0 0 0 2px rgba(0,180,216,.12) !important;
+}
+.stSelectbox > div > div,
+.stMultiSelect > div > div {
+    background: #0d1321 !important; border-color: rgba(0,180,216,.18) !important;
+    border-radius: 8px !important;
+}
+
+/* ── Multiselect tags ───────────────────────────────────────────────── */
+.stMultiSelect span[data-baseweb="tag"] {
+    background: rgba(0,180,216,.18) !important; border: 1px solid rgba(0,180,216,.35) !important;
+    border-radius: 6px !important; color: #7dd3fc !important;
+}
+
+/* ── Expander ───────────────────────────────────────────────────────── */
+.streamlit-expanderHeader {
+    background: rgba(13,19,33,.8) !important; border-radius: 8px !important;
+    border: 1px solid rgba(0,180,216,.13) !important; font-weight: 500 !important;
+}
+
+/* ── Slider ─────────────────────────────────────────────────────────── */
+[data-baseweb="slider"] [data-testid="stThumbValue"] { color: #00b4d8 !important; }
+[role="slider"] { background: #00b4d8 !important; }
+
+/* ── Code ───────────────────────────────────────────────────────────── */
+.stCode, code, pre {
+    font-family: 'JetBrains Mono', monospace !important;
+    background: #0d1321 !important;
+    border: 1px solid rgba(0,180,216,.13) !important; border-radius: 8px !important;
+}
+
+/* ── Typography ─────────────────────────────────────────────────────── */
+h1 {
+    font-weight: 700 !important; font-size: 1.75rem !important;
+    letter-spacing: -.025em !important; color: #f1f5f9 !important;
+    padding-bottom: .6rem !important;
+    border-bottom: 2px solid rgba(0,180,216,.25) !important; margin-bottom: 1.5rem !important;
+}
+h2 { font-weight: 600 !important; color: #cbd5e1 !important; font-size: 1.25rem !important; }
+h3 { font-weight: 600 !important; color: #94a3b8 !important; font-size: 1.05rem !important; }
+
+/* ── Divider ────────────────────────────────────────────────────────── */
+hr { border-color: rgba(0,180,216,.12) !important; margin: 1.5rem 0 !important; }
+
+/* ── Caption ────────────────────────────────────────────────────────── */
+.stCaption { color: #475569 !important; font-size: .78rem !important; }
+
+/* ── Scrollbar ──────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #07090f; }
+::-webkit-scrollbar-thumb { background: rgba(0,180,216,.25); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,180,216,.45); }
+
+/* ── Signal badge utility classes (used in HTML markdown) ────────────── */
+.badge {
+    display: inline-block; padding: 3px 10px; border-radius: 20px;
+    font-size: .7rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+}
+.badge-strong { background:rgba(0,255,157,.18); color:#00ff9d; border:1px solid rgba(0,255,157,.35); }
+.badge-buy    { background:rgba(0,204,150,.15); color:#00cc96; border:1px solid rgba(0,204,150,.3); }
+.badge-watch  { background:rgba(251,183,3,.13);  color:#fbb703; border:1px solid rgba(251,183,3,.28); }
+.badge-avoid  { background:rgba(239,83,80,.13);  color:#ef5350; border:1px solid rgba(239,83,80,.28); }
+.badge-hold   { background:rgba(148,163,184,.08);color:#94a3b8; border:1px solid rgba(148,163,184,.18); }
+
+/* ── KPI stat card ──────────────────────────────────────────────────── */
+.kpi-card {
+    background: linear-gradient(135deg,#0d1321,#111827);
+    border: 1px solid rgba(0,180,216,.18); border-radius: 12px;
+    padding: 1rem 1.25rem; text-align: center;
+}
+.kpi-label { font-size:.7rem; font-weight:600; text-transform:uppercase; letter-spacing:.09em; color:#4b5e7a; }
+.kpi-value { font-size:1.5rem; font-weight:700; font-family:'JetBrains Mono',monospace; color:#e2e8f0; margin:.2rem 0; }
+.kpi-sub   { font-size:.75rem; color:#64748b; }
+</style>
+""", unsafe_allow_html=True)
+
 # ── Optional module imports (graceful degradation if a module errors) ────────
 # Each module tried individually — one bad import won't kill the whole UI.
 def _try_import(name):
@@ -105,8 +276,32 @@ def _init_resources():
 C = _init_resources()
 
 # ── Sidebar navigation ───────────────────────────────────────────────────────
-st.sidebar.title("🌍 Global Trading Dashboard")
-st.sidebar.caption(f"Account: ${config.ACCOUNT_SIZE:,}  |  Target: {config.MONTHLY_TARGET*100:.0f}%/mo")
+st.sidebar.markdown("""
+<div style="padding:.75rem 1rem 1rem; border-bottom:1px solid rgba(0,180,216,.15); margin-bottom:.75rem;">
+  <div style="font-size:1.2rem;font-weight:800;color:#e2e8f0;letter-spacing:-.02em;">
+    🌍 Global Trading
+  </div>
+  <div style="font-size:.72rem;color:#4b5e7a;font-weight:500;letter-spacing:.05em;text-transform:uppercase;margin-top:.15rem;">
+    Multi-Market Dashboard
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+_acct_target = config.ACCOUNT_SIZE * config.MONTHLY_TARGET
+st.sidebar.markdown(f"""
+<div style="background:linear-gradient(135deg,rgba(0,119,182,.15),rgba(0,180,216,.08));
+            border:1px solid rgba(0,180,216,.2);border-radius:10px;
+            padding:.65rem 1rem;margin:.5rem 0 1rem;font-size:.78rem;">
+  <div style="display:flex;justify-content:space-between;margin-bottom:.3rem;">
+    <span style="color:#4b5e7a;font-weight:600;text-transform:uppercase;letter-spacing:.06em;font-size:.68rem;">Account</span>
+    <span style="color:#e2e8f0;font-family:'JetBrains Mono',monospace;font-weight:700;">${config.ACCOUNT_SIZE:,}</span>
+  </div>
+  <div style="display:flex;justify-content:space-between;">
+    <span style="color:#4b5e7a;font-weight:600;text-transform:uppercase;letter-spacing:.06em;font-size:.68rem;">Monthly Target</span>
+    <span style="color:#00cc96;font-family:'JetBrains Mono',monospace;font-weight:700;">${_acct_target:,.0f} &nbsp;<span style="color:#4b5e7a;font-size:.65rem;">({config.MONTHLY_TARGET*100:.0f}%)</span></span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
 PAGES = [
     "🏠 Overview",
@@ -132,25 +327,44 @@ page = st.sidebar.selectbox("Navigate", PAGES)
 
 # Module status indicators in sidebar
 st.sidebar.markdown("---")
-st.sidebar.caption("Module Status")
-for _lbl, _flag in [
-    ("Signals",      HAS_GSG),
-    ("Fundamentals", HAS_FA),
-    ("Regime",       HAS_REGIME),
-    ("Journal",      HAS_JOURNAL),
-    ("Screener",     HAS_SS),
-    ("Earnings",     HAS_EARN),
-    ("Insider",      HAS_INSIDER),
-    ("Sector Rot.",  HAS_SR),
-    ("Backtester",   HAS_BT),
-]:
-    st.sidebar.text(f"{'✅' if _flag else '❌'} {_lbl}")
+_mod_rows = "".join(
+    f'<div style="display:flex;align-items:center;gap:.5rem;padding:.2rem 0;">'
+    f'<span style="width:6px;height:6px;border-radius:50%;background:{"#00cc96" if ok else "#ef5350"};'
+    f'box-shadow:0 0 6px {"#00cc96" if ok else "#ef5350"};flex-shrink:0;"></span>'
+    f'<span style="font-size:.75rem;color:{"#94a3b8" if ok else "#475569"};font-weight:{"500" if ok else "400"};">{lbl}</span>'
+    f'</div>'
+    for lbl, ok in [
+        ("Signals",      HAS_GSG),
+        ("Fundamentals", HAS_FA),
+        ("Regime",       HAS_REGIME),
+        ("Journal",      HAS_JOURNAL),
+        ("Screener",     HAS_SS),
+        ("Earnings",     HAS_EARN),
+        ("Insider",      HAS_INSIDER),
+        ("Sector Rot.",  HAS_SR),
+        ("Backtester",   HAS_BT),
+    ]
+)
+st.sidebar.markdown(
+    f'<div style="padding:.4rem .2rem;">'
+    f'<div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;'
+    f'color:#334155;margin-bottom:.4rem;">Modules</div>'
+    f'{_mod_rows}</div>',
+    unsafe_allow_html=True,
+)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE: OVERVIEW
 # ═══════════════════════════════════════════════════════════════════════════════
 if page == "🏠 Overview":
     st.title("🏠 Trading Dashboard Overview")
+    st.markdown(
+        f'<p style="color:#475569;font-size:.85rem;margin-top:-.8rem;margin-bottom:1.2rem;">'
+        f'{datetime.now().strftime("%A, %d %B %Y  ·  %H:%M")} &nbsp;|&nbsp; '
+        f'Risk / trade: <b style="color:#00b4d8;">{config.RISK_PER_TRADE*100:.1f}%</b> &nbsp;|&nbsp; '
+        f'Max positions: <b style="color:#00b4d8;">{config.MAX_POSITIONS}</b></p>',
+        unsafe_allow_html=True,
+    )
 
     # Account metrics
     c1, c2, c3, c4 = st.columns(4)
@@ -330,17 +544,61 @@ elif page == "🔀 Combined Analysis":
                 try:
                     result = C["ca"].analyze(symbol)
                     if result is not None:
-                        # ── Header ──────────────────────────────────────────
-                        quality_color = {"A+": "🟢", "A": "🟢", "B": "🟡", "C": "🟠", "D": "🔴"}.get(result.trade_quality, "⚪")
-                        st.markdown(f"## {result.name} ({result.symbol})  |  {result.sector}")
-                        st.markdown(f"### {result.recommendation}")
+                        # ── Header banner ────────────────────────────────────
+                        qcolors = {"A+": ("#00ff9d","#003d28"), "A": ("#00cc96","#002e22"),
+                                   "B": ("#fbb703","#2e2300"), "C": ("#fb923c","#2e1500"), "D": ("#ef5350","#2e0808")}
+                        qfg, qbg = qcolors.get(result.trade_quality, ("#94a3b8","#1e293b"))
+                        sig_badge_cls = {"STRONG BUY":"badge-strong","BUY":"badge-buy",
+                                         "BUY (Weak Fundamentals)":"badge-buy",
+                                         "WAIT (Good Company, Bad Timing)":"badge-watch",
+                                         "CAUTION (Poor Fundamentals)":"badge-watch",
+                                         "HOLD":"badge-hold"}.get(result.combined_signal,"badge-hold")
+                        st.markdown(f"""
+<div style="background:linear-gradient(135deg,#0d1321,#111827);border:1px solid rgba(0,180,216,.2);
+            border-radius:14px;padding:1.2rem 1.5rem;margin-bottom:1.2rem;">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;">
+    <div>
+      <div style="font-size:1.5rem;font-weight:800;color:#f1f5f9;letter-spacing:-.02em;">
+        {result.name} &nbsp;<span style="color:#4b5e7a;font-size:1rem;font-weight:500;">({result.symbol})</span>
+      </div>
+      <div style="font-size:.8rem;color:#64748b;margin-top:.2rem;">{result.sector}</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:.75rem;">
+      <span class="badge {sig_badge_cls}">{result.combined_signal}</span>
+      <span style="background:{qbg};color:{qfg};border:1px solid {qfg}44;border-radius:10px;
+                   padding:4px 14px;font-size:.8rem;font-weight:800;letter-spacing:.05em;">
+        {result.trade_quality}
+      </span>
+    </div>
+  </div>
+  <div style="margin-top:.8rem;font-size:.95rem;color:#94a3b8;">{result.recommendation}</div>
+</div>
+""", unsafe_allow_html=True)
 
-                        # ── Score cards ──────────────────────────────────────
-                        c1, c2, c3, c4 = st.columns(4)
-                        c1.metric("Technical Score",   f"{result.technical_score}/100")
-                        c2.metric("Fundamental Score", f"{result.fundamental_score}/100")
-                        c3.metric("Combined Score",    f"{result.combined_score}/100")
-                        c4.metric("Trade Quality",     f"{quality_color} {result.trade_quality}")
+                        # ── Score gauges ─────────────────────────────────────
+                        def _gauge_bar(score, color="#00b4d8"):
+                            pct = min(max(score, 0), 100)
+                            return (f'<div style="background:rgba(255,255,255,.05);border-radius:4px;height:6px;margin-top:.4rem;">'
+                                    f'<div style="width:{pct}%;height:100%;border-radius:4px;'
+                                    f'background:linear-gradient(90deg,{color}99,{color});"></div></div>')
+
+                        def _score_card(label, score, color="#00b4d8"):
+                            return (f'<div style="background:linear-gradient(135deg,#0d1321,#111827);'
+                                    f'border:1px solid rgba(0,180,216,.15);border-radius:12px;padding:.9rem 1rem;">'
+                                    f'<div style="font-size:.68rem;font-weight:700;text-transform:uppercase;'
+                                    f'letter-spacing:.09em;color:#4b5e7a;">{label}</div>'
+                                    f'<div style="font-size:1.6rem;font-weight:800;font-family:JetBrains Mono,monospace;'
+                                    f'color:{color};margin:.15rem 0;">{score}<span style="font-size:.85rem;color:#4b5e7a;">/100</span></div>'
+                                    f'{_gauge_bar(score, color)}</div>')
+
+                        tech_color  = "#00cc96" if result.technical_score  >= 60 else ("#fbb703" if result.technical_score  >= 40 else "#ef5350")
+                        fund_color  = "#00cc96" if result.fundamental_score >= 60 else ("#fbb703" if result.fundamental_score >= 40 else "#ef5350")
+                        comb_color  = "#00cc96" if result.combined_score    >= 60 else ("#fbb703" if result.combined_score    >= 40 else "#ef5350")
+
+                        gc1, gc2, gc3 = st.columns(3)
+                        gc1.markdown(_score_card("Technical Score",    result.technical_score,   tech_color), unsafe_allow_html=True)
+                        gc2.markdown(_score_card("Fundamental Score",  result.fundamental_score, fund_color), unsafe_allow_html=True)
+                        gc3.markdown(_score_card("Combined Score",     result.combined_score,    comb_color), unsafe_allow_html=True)
 
                         st.divider()
 

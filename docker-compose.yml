@@ -1,0 +1,69 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# docker-compose.yml — Trading System
+#
+# Services:
+#   dashboard   → Streamlit UI  (http://localhost:8501)
+#   scheduler   → automated daily tasks (optional, start with --profile scheduler)
+#
+# Quick start:
+#   docker compose up --build            # dashboard only
+#   docker compose --profile scheduler up --build  # dashboard + scheduler
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: trading-system:latest
+    container_name: trading-dashboard
+    command: dashboard
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      # Corporate proxy: trust the host's CA bundle inside the container
+      CURL_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+    volumes:
+      # Persist data, cache and logs across container restarts
+      - trading_data:/app/data
+      - trading_cache:/app/cache
+      - trading_logs:/app/logs
+      # Mount host CA bundle so corporate proxy certs are trusted
+      - /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  scheduler:
+    image: trading-system:latest
+    container_name: trading-scheduler
+    command: scheduler
+    env_file:
+      - .env
+    environment:
+      CURL_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+    volumes:
+      - trading_data:/app/data
+      - trading_cache:/app/cache
+      - trading_logs:/app/logs
+      - /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro
+    restart: unless-stopped
+    depends_on:
+      - dashboard
+    profiles:
+      - scheduler
+
+volumes:
+  trading_data:
+  trading_cache:
+  trading_logs:

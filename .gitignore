@@ -3,3 +3,6 @@ scheduler.log
 __pycache__/
 *.pyc
 *.pyo
+
+# Docker
+.dockerignore
