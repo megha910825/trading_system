@@ -57,6 +57,9 @@ class TradeJournal:
                 r_multiple REAL,
                 holding_days INTEGER,
 
+                mae REAL,
+                mfe REAL,
+
                 followed_plan INTEGER DEFAULT 1,
                 mistakes TEXT,
                 lessons TEXT,
@@ -65,6 +68,14 @@ class TradeJournal:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # Add MAE/MFE columns to existing databases that pre-date this schema
+        for col in ("mae REAL", "mfe REAL"):
+            col_name = col.split()[0]
+            try:
+                cursor.execute(f"ALTER TABLE trades ADD COLUMN {col}")
+            except sqlite3.OperationalError:
+                pass  # column already exists
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS daily_notes (
@@ -134,9 +145,10 @@ class TradeJournal:
 
     def log_exit(
         self, trade_id: int, exit_price: float, exit_reason: str,
-        followed_plan: bool = True, mistakes: str = "", lessons: str = ""
+        followed_plan: bool = True, mistakes: str = "", lessons: str = "",
+        mae: float = None, mfe: float = None,
     ) -> Dict:
-        """Log trade exit"""
+        """Log trade exit. mae/mfe are % excursions (e.g. -3.5 for 3.5% adverse)."""
 
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -165,12 +177,14 @@ class TradeJournal:
             UPDATE trades SET
                 exit_date = ?, exit_price = ?, exit_reason = ?,
                 pnl = ?, pnl_pct = ?, r_multiple = ?, holding_days = ?,
-                followed_plan = ?, mistakes = ?, lessons = ?
+                followed_plan = ?, mistakes = ?, lessons = ?,
+                mae = ?, mfe = ?
             WHERE id = ?
         """, (
             datetime.now().date(), exit_price, exit_reason,
             pnl, pnl_pct, r_multiple, holding_days,
-            int(followed_plan), mistakes, lessons, trade_id
+            int(followed_plan), mistakes, lessons,
+            mae, mfe, trade_id
         ))
 
         conn.commit()
@@ -285,6 +299,52 @@ class TradeJournal:
             FROM trades
             WHERE exit_date IS NOT NULL AND setup_type IS NOT NULL
             GROUP BY setup_type
+            ORDER BY total_pnl DESC
+        """, conn)
+        conn.close()
+        return df
+
+    def get_performance_by_setup(self) -> pd.DataFrame:
+        """Detailed performance breakdown by setup type, including MAE/MFE."""
+        conn = sqlite3.connect(self.db_path)
+        df = pd.read_sql_query("""
+            SELECT
+                COALESCE(setup_type, 'Unknown') AS setup_type,
+                COUNT(*) AS trades,
+                ROUND(SUM(CASE WHEN pnl > 0 THEN 1.0 ELSE 0 END) * 100.0 / COUNT(*), 1) AS win_rate,
+                ROUND(AVG(r_multiple), 2) AS avg_r,
+                ROUND(SUM(pnl), 2) AS total_pnl,
+                ROUND(AVG(pnl), 2) AS avg_pnl,
+                ROUND(AVG(CASE WHEN pnl > 0 THEN pnl END), 2) AS avg_win,
+                ROUND(AVG(CASE WHEN pnl <= 0 THEN pnl END), 2) AS avg_loss,
+                ROUND(AVG(mae), 2) AS avg_mae,
+                ROUND(AVG(mfe), 2) AS avg_mfe,
+                ROUND(AVG(holding_days), 1) AS avg_hold_days
+            FROM trades
+            WHERE exit_date IS NOT NULL
+            GROUP BY setup_type
+            ORDER BY total_pnl DESC
+        """, conn)
+        conn.close()
+        return df
+
+    def get_performance_by_regime(self) -> pd.DataFrame:
+        """Performance breakdown by market regime."""
+        conn = sqlite3.connect(self.db_path)
+        df = pd.read_sql_query("""
+            SELECT
+                COALESCE(market_regime, 'Unknown') AS market_regime,
+                COUNT(*) AS trades,
+                ROUND(SUM(CASE WHEN pnl > 0 THEN 1.0 ELSE 0 END) * 100.0 / COUNT(*), 1) AS win_rate,
+                ROUND(AVG(r_multiple), 2) AS avg_r,
+                ROUND(SUM(pnl), 2) AS total_pnl,
+                ROUND(AVG(pnl), 2) AS avg_pnl,
+                ROUND(AVG(mae), 2) AS avg_mae,
+                ROUND(AVG(mfe), 2) AS avg_mfe,
+                ROUND(AVG(holding_days), 1) AS avg_hold_days
+            FROM trades
+            WHERE exit_date IS NOT NULL
+            GROUP BY market_regime
             ORDER BY total_pnl DESC
         """, conn)
         conn.close()

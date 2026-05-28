@@ -207,6 +207,188 @@ class GlobalDataFetcher:
 
         return rates
 
+    # ─── Real-time Quotes ──────────────────────────────────────────────────────
+    def get_realtime_quote(self, symbol: str) -> Dict:
+        """
+        Return the best available real-time quote for a symbol.
+
+        Priority:
+          1. Polygon.io REST snapshot (requires POLYGON_API_KEY env var)
+          2. yfinance fast_info (15-20 min delay)
+          3. Last bar from 1-day history
+
+        Returns a dict with keys: symbol, price, bid, ask, volume,
+                                  timestamp, source, currency.
+        """
+        import os
+
+        polygon_key = os.environ.get("POLYGON_API_KEY", "").strip()
+        if polygon_key:
+            result = self._polygon_quote(symbol, polygon_key)
+            if result:
+                return result
+
+        # Fallback 1: yfinance fast_info
+        try:
+            import yfinance as yf
+            ti = yf.Ticker(symbol)
+            fi = ti.fast_info
+            price = getattr(fi, "last_price", None) or getattr(fi, "regular_market_price", None)
+            if price:
+                market = self.detect_market(symbol)
+                return {
+                    "symbol": symbol,
+                    "price": round(float(price), 4),
+                    "bid": None,
+                    "ask": None,
+                    "volume": getattr(fi, "last_volume", None),
+                    "timestamp": datetime.now().isoformat(),
+                    "source": "yfinance_fast_info",
+                    "currency": MARKETS[market].currency,
+                    "delay_note": "~15-20 min delay",
+                }
+        except Exception:
+            pass
+
+        # Fallback 2: last close bar
+        price, currency = self.get_current_price(symbol)
+        return {
+            "symbol": symbol,
+            "price": price,
+            "bid": None,
+            "ask": None,
+            "volume": None,
+            "timestamp": datetime.now().isoformat(),
+            "source": "yfinance_history",
+            "currency": currency,
+            "delay_note": "End-of-day close",
+        }
+
+    def _polygon_quote(self, symbol: str, api_key: str) -> Optional[Dict]:
+        """Fetch snapshot quote from Polygon.io REST API."""
+        import urllib.request
+        import json as _json
+
+        # Only US equities supported by Polygon without suffix
+        if "." in symbol:
+            return None  # German/Indian symbols need different endpoints
+
+        url = f"https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/{symbol}?apiKey={api_key}"
+        try:
+            with urllib.request.urlopen(url, timeout=5) as resp:
+                data = _json.loads(resp.read().decode())
+
+            if data.get("status") != "OK":
+                return None
+
+            day = data.get("ticker", {}).get("day", {})
+            min_bar = data.get("ticker", {}).get("min", {})
+            last_quote = data.get("ticker", {}).get("lastQuote", {})
+            last_trade = data.get("ticker", {}).get("lastTrade", {})
+
+            price = (
+                last_trade.get("p")
+                or min_bar.get("c")
+                or day.get("c")
+            )
+            if not price:
+                return None
+
+            return {
+                "symbol": symbol,
+                "price": round(float(price), 4),
+                "bid": last_quote.get("p"),
+                "ask": last_quote.get("P"),
+                "volume": day.get("v"),
+                "timestamp": datetime.now().isoformat(),
+                "source": "polygon_rest",
+                "currency": "USD",
+                "delay_note": "Real-time",
+            }
+        except Exception:
+            return None
+
+    def stream_quotes_polygon(
+        self,
+        symbols: List[str],
+        on_quote,
+        api_key: str = None,
+    ):
+        """
+        Stream real-time quotes via Polygon.io WebSocket.
+
+        Requires `websocket-client` package:  pip install websocket-client
+        Set POLYGON_API_KEY env var or pass api_key explicitly.
+
+        Args:
+            symbols:  list of US ticker symbols (no suffix)
+            on_quote: callback(symbol: str, price: float, timestamp: str)
+            api_key:  Polygon API key (falls back to POLYGON_API_KEY env var)
+
+        Usage example:
+            def my_handler(symbol, price, ts):
+                print(f"{symbol} @ {price} [{ts}]")
+
+            fetcher.stream_quotes_polygon(["AAPL", "NVDA"], my_handler)
+        """
+        import os
+        import json as _json
+
+        key = api_key or os.environ.get("POLYGON_API_KEY", "").strip()
+        if not key:
+            raise ValueError(
+                "Polygon API key required. Set POLYGON_API_KEY environment variable "
+                "or pass api_key argument."
+            )
+
+        # Filter to US symbols only
+        us_symbols = [s for s in symbols if "." not in s]
+        if not us_symbols:
+            raise ValueError("WebSocket streaming is only supported for US symbols.")
+
+        try:
+            import websocket
+        except ImportError:
+            raise ImportError(
+                "websocket-client not installed. Run: pip install websocket-client"
+            )
+
+        WS_URL = "wss://socket.polygon.io/stocks"
+
+        def _on_message(ws, message):
+            events = _json.loads(message)
+            for event in events:
+                ev_type = event.get("ev")
+                if ev_type == "connected":
+                    ws.send(_json.dumps({"action": "auth", "params": key}))
+                elif ev_type == "auth_success":
+                    subs = ",".join(f"T.{s}" for s in us_symbols)
+                    ws.send(_json.dumps({"action": "subscribe", "params": subs}))
+                elif ev_type == "T":  # Trade event
+                    try:
+                        on_quote(
+                            event["sym"],
+                            float(event["p"]),
+                            datetime.fromtimestamp(event["t"] / 1000).isoformat(),
+                        )
+                    except (KeyError, ValueError):
+                        pass
+
+        def _on_error(ws, error):
+            print(f"[Polygon WS] Error: {error}")
+
+        def _on_close(ws, close_status_code, close_msg):
+            print(f"[Polygon WS] Connection closed: {close_status_code}")
+
+        ws_app = websocket.WebSocketApp(
+            WS_URL,
+            on_message=_on_message,
+            on_error=_on_error,
+            on_close=_on_close,
+        )
+        print(f"[Polygon WS] Connecting for: {us_symbols}")
+        ws_app.run_forever()  # blocking; run in a thread for non-blocking use
+
 
 # ============================================================
 # MAIN / TEST

@@ -4,13 +4,18 @@ Global Signal Generator - Generates signals for US, German, and Indian markets
 """
 
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 
 from global_data_fetcher import GlobalDataFetcher
 from technical_analyzer import TechnicalAnalyzer
 from market_config import MARKETS, get_market_status
 from global_universe_manager import GlobalUniverseManager
+
+
+# Days before/after earnings to avoid entering new positions
+EARNINGS_BLACKOUT_DAYS_BEFORE = 5
+EARNINGS_BLACKOUT_DAYS_AFTER = 2
 
 
 class GlobalSignalGenerator:
@@ -24,6 +29,58 @@ class GlobalSignalGenerator:
         self.universe_manager = GlobalUniverseManager()
         self.signals = {}  # {market: [signals]}
         self.all_signals = []
+
+        # Lazy-load earnings calendar to avoid circular imports
+        self._earnings_cache: Dict[str, Optional[datetime]] = {}
+
+    def _get_next_earnings(self, symbol: str) -> Optional[datetime]:
+        """Return next earnings date for symbol, cached."""
+        if symbol in self._earnings_cache:
+            return self._earnings_cache[symbol]
+
+        earnings_date = None
+        try:
+            import yfinance as yf
+            ticker = yf.Ticker(symbol)
+            cal = ticker.calendar
+            if cal is not None and not cal.empty:
+                # calendar has columns; earnings date is first row of 'Earnings Date'
+                if 'Earnings Date' in cal.columns:
+                    ed = cal['Earnings Date'].dropna()
+                    if not ed.empty:
+                        dt = pd.to_datetime(ed.iloc[0])
+                        if hasattr(dt, 'to_pydatetime'):
+                            earnings_date = dt.to_pydatetime()
+                        else:
+                            earnings_date = dt
+                elif hasattr(cal, 'iloc'):
+                    # Alternative layout: calendar is a dict-like with dates in columns
+                    pass
+        except Exception:
+            pass
+
+        self._earnings_cache[symbol] = earnings_date
+        return earnings_date
+
+    def _is_near_earnings(self, symbol: str) -> tuple:
+        """
+        Returns (near_earnings: bool, days_to_earnings: int | None).
+        If within EARNINGS_BLACKOUT_DAYS_BEFORE before or EARNINGS_BLACKOUT_DAYS_AFTER
+        after earnings, returns True.
+        """
+        earnings_date = self._get_next_earnings(symbol)
+        if earnings_date is None:
+            return False, None
+
+        now = datetime.now().replace(tzinfo=None)
+        if hasattr(earnings_date, 'tzinfo') and earnings_date.tzinfo is not None:
+            earnings_date = earnings_date.replace(tzinfo=None)
+
+        days_diff = (earnings_date - now).days
+
+        if -EARNINGS_BLACKOUT_DAYS_AFTER <= days_diff <= EARNINGS_BLACKOUT_DAYS_BEFORE:
+            return True, days_diff
+        return False, days_diff
 
     def generate_signals(self, markets: List[str] = None) -> Dict[str, List[Dict]]:
         """
@@ -116,6 +173,21 @@ class GlobalSignalGenerator:
         info = self.fetcher.get_stock_info(symbol)
         market = self.fetcher.detect_market(symbol)
         market_info = MARKETS[market]
+
+        # ── Earnings proximity filter ──────────────────────────────────
+        near_earnings, days_to_earnings = self._is_near_earnings(symbol)
+        if near_earnings:
+            # Downgrade signal if we're too close to earnings
+            if analysis.get("signal_status") in ["STRONG BUY", "BUY"]:
+                analysis["signal_status"] = "WATCH"
+                analysis["signal_score"] = min(analysis.get("signal_score", 50), 44)
+                analysis["earnings_warning"] = (
+                    f"⚠️ Earnings in {days_to_earnings}d — signal downgraded to WATCH"
+                )
+        else:
+            analysis["earnings_warning"] = None
+
+        analysis["days_to_earnings"] = days_to_earnings
 
         # Add market-specific info
         analysis.update({

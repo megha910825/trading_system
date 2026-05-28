@@ -1,246 +1,114 @@
-#!/usr/bin/env python3
 """
-═══════════════════════════════════════════════════════════════════════════════════
-ENHANCED TRADING DASHBOARD - Complete Version
-═══════════════════════════════════════════════════════════════════════════════════
+Global Swing Trading Dashboard
+Multi-market Streamlit UI — US, Germany (XETRA), India (NSE).
 
-Features:
-- Market Regime Analysis
-- Technical Signals
-- Fundamental Analysis
-- Combined (Tech + Fund) Analysis
-- Earnings Calendar
-- Insider Activity Tracking
-- Trade Journal
-- Performance Tracking
-- Portfolio Management
+Pages:
+  1.  🏠 Overview            account metrics, market status, quick scan
+  2.  📊 Market Regime       SPY/VIX regime, should-trade gate
+  3.  🎯 Signals             live signals across all 3 markets (full universe)
+  4.  📈 Fundamentals        fundamental scores and ratios
+  5.  🔀 Combined Analysis   technical + fundamental combined
+  6.  📅 Earnings Calendar   upcoming earnings risk calendar
+  7.  👔 Insider Activity    recent insider transactions
+  8.  🔍 Stock Screener      custom filter screener
+  9.  📋 Trade Journal       log entries, close trades, view history
+  10. 📊 Performance         monthly P&L tracking
+  11. 💼 Portfolio           open positions, allocation
+  12. 📐 Position Calculator  size trades with Fixed-Risk or ATR method
+  13. 🔬 Signal Analysis      signal score distribution charts
+  14. 🔄 Sector Rotation      US sector ETF relative strength rankings
+  15. 🧪 Backtest Pro         walk-forward + Monte Carlo simulation
+  16. 📓 Journal Analytics    MAE/MFE, regime & setup performance
+  17. ⚙️ Settings             config display
 
-Run: streamlit run dashboard.py
-═══════════════════════════════════════════════════════════════════════════════════
+Launch:  streamlit run dashboard.py   |   python run_dashboard.py
 """
 
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
-import plotly.express as px
+import numpy as np
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional
-import time
+import config
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# PAGE CONFIG
-# ═══════════════════════════════════════════════════════════════════════════════
-
+# ── Page config MUST be the very first Streamlit call ───────────────────────
 st.set_page_config(
-    page_title="Trading Dashboard",
-    page_icon="📈",
+    page_title="Global Trading Dashboard",
+    page_icon="🌍",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# IMPORTS WITH ERROR HANDLING
-# ═══════════════════════════════════════════════════════════════════════════════
 
-# Data
-try:
-    import yfinance as yf
-    HAS_YFINANCE = True
-except ImportError:
-    HAS_YFINANCE = False
-
-# Core Modules
-try:
-    from global_signal_generator import GlobalSignalGenerator
-    HAS_SIGNALS = True
-except ImportError:
-    HAS_SIGNALS = False
-
-try:
-    from technical_analyzer import TechnicalAnalyzer
-    HAS_ANALYZER = True
-except ImportError:
-    HAS_ANALYZER = False
-
-try:
-    from market_regime import MarketRegimeFilter
-    HAS_REGIME = True
-except ImportError:
-    HAS_REGIME = False
-
-try:
-    from trade_journal import TradeJournal
-    HAS_JOURNAL = True
-except ImportError:
-    HAS_JOURNAL = False
-
-try:
-    from performance_tracker import PerformanceTracker
-    HAS_TRACKER = True
-except ImportError:
-    HAS_TRACKER = False
-
-try:
-    from market_config import MARKETS, get_market_status
-    HAS_MARKETS = True
-except ImportError:
-    HAS_MARKETS = False
-    def get_market_status():
-        return {}
-
-# Fundamental Analysis
-try:
-    from fundamental_analyzer import FundamentalAnalyzer
-    HAS_FUNDAMENTALS = True
-except ImportError:
-    HAS_FUNDAMENTALS = False
-
-try:
-    from combined_analyzer import CombinedAnalyzer
-    HAS_COMBINED = True
-except ImportError:
-    HAS_COMBINED = False
-
-try:
-    from fundamental_screener import FundamentalScreener, ScreenerPreset
-    HAS_SCREENER = True
-except ImportError:
-    HAS_SCREENER = False
-
-# Earnings & Insider
-try:
-    from earnings_calendar import EarningsCalendar
-    HAS_EARNINGS = True
-except ImportError:
-    HAS_EARNINGS = False
-
-try:
-    from insider_tracker import InsiderTracker
-    HAS_INSIDER = True
-except ImportError:
-    HAS_INSIDER = False
-
-# Config
-try:
-    import config
-    ACCOUNT_SIZE = getattr(config, 'ACCOUNT_SIZE', 50000)
-    RISK_PER_TRADE = getattr(config, 'RISK_PER_TRADE', 0.015)
-except ImportError:
-    ACCOUNT_SIZE = 50000
-    RISK_PER_TRADE = 0.015
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# DEFAULT WATCHLISTS
-# ═══════════════════════════════════════════════════════════════════════════════
-
-WATCHLIST_US = [
-    "NVDA", "AMD", "AAPL", "MSFT", "GOOGL", "META", "AMZN", "TSLA",
-    "AVGO", "CRM", "NFLX", "ADBE", "ORCL", "INTC", "QCOM", "MU"
-]
-
-WATCHLIST_DE = [
-    "SAP.DE", "SIE.DE", "ALV.DE", "DTE.DE", "BAS.DE", "BAYN.DE"
-]
-
-WATCHLIST_IN = [
-    "TCS.NS", "RELIANCE.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS"
-]
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# HELPER FUNCTIONS
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def get_current_price(symbol: str) -> float:
-    """Get current price for a symbol"""
-    if not HAS_YFINANCE:
-        return 0
+# ── Optional module imports (graceful degradation if a module errors) ────────
+# Each module tried individually — one bad import won't kill the whole UI.
+def _try_import(name):
     try:
-        ticker = yf.Ticker(symbol)
-        return ticker.fast_info.get('lastPrice', 0)
-    except:
-        return 0
+        return __import__(name)
+    except Exception:
+        return None
 
+_gdf  = _try_import("global_data_fetcher")
+_gsg  = _try_import("global_signal_generator")
+_ta   = _try_import("technical_analyzer")
+_fa   = _try_import("fundamental_analyzer")
+_ca   = _try_import("combined_analyzer")
+_mr   = _try_import("market_regime")
+_pm   = _try_import("position_manager")
+_tj   = _try_import("trade_journal")
+_pt   = _try_import("performance_tracker")
+_bt   = _try_import("backtester")
+_ec   = _try_import("earnings_calendar")
+_it   = _try_import("insider_tracker")
+_ss   = _try_import("stock_screener")
+_sr   = _try_import("sector_rotation")
+_mc   = _try_import("market_config")
+_yf   = _try_import("yfinance")
 
-def create_price_chart(symbol: str, period: str = "6mo") -> go.Figure:
-    """Create candlestick chart with indicators"""
-    if not HAS_YFINANCE:
-        return go.Figure()
+# Availability flags used throughout for guarding UI sections
+HAS_GDF    = _gdf  is not None
+HAS_GSG    = _gsg  is not None
+HAS_TA     = _ta   is not None
+HAS_FA     = _fa   is not None
+HAS_CA     = _ca   is not None
+HAS_REGIME = _mr   is not None
+HAS_PM     = _pm   is not None
+HAS_JOURNAL= _tj   is not None
+HAS_PT     = _pt   is not None
+HAS_BT     = _bt   is not None
+HAS_EARN   = _ec   is not None
+HAS_INSIDER= _it   is not None
+HAS_SS     = _ss   is not None
+HAS_SR     = _sr   is not None
+HAS_MC     = _mc   is not None
+HAS_YF     = _yf   is not None
 
-    try:
-        ticker = yf.Ticker(symbol)
-        df = ticker.history(period=period)
+# ── Cached resource initialisation ──────────────────────────────────────────
+# st.cache_resource keeps one instance alive across all Streamlit reruns.
+@st.cache_resource
+def _init_resources():
+    res = {}
+    if HAS_GDF:    res["fetcher"]  = _gdf.GlobalDataFetcher()
+    if HAS_GSG:    res["gen"]      = _gsg.GlobalSignalGenerator()
+    if HAS_TA:     res["analyzer"] = _ta.TechnicalAnalyzer()
+    if HAS_FA:     res["fa"]       = _fa.FundamentalAnalyzer()
+    if HAS_CA:     res["ca"]       = _ca.CombinedAnalyzer()
+    if HAS_REGIME: res["regime"]   = _mr.MarketRegimeFilter()
+    if HAS_PM:     res["pm"]       = _pm.PositionManager()
+    if HAS_JOURNAL:res["journal"]  = _tj.TradeJournal()
+    if HAS_PT:     res["pt"]       = _pt.PerformanceTracker()
+    if HAS_BT:     res["bt"]       = _bt.Backtester()
+    if HAS_EARN:   res["earn"]     = _ec.EarningsCalendar()
+    if HAS_INSIDER:res["insider"]  = _it.InsiderTracker()
+    if HAS_SS:     res["screener"] = _ss.StockScreener()
+    return res
 
-        if df.empty:
-            return go.Figure()
+C = _init_resources()
 
-        # Calculate EMAs
-        df['EMA20'] = df['Close'].ewm(span=20).mean()
-        df['EMA50'] = df['Close'].ewm(span=50).mean()
+# ── Sidebar navigation ───────────────────────────────────────────────────────
+st.sidebar.title("🌍 Global Trading Dashboard")
+st.sidebar.caption(f"Account: ${config.ACCOUNT_SIZE:,}  |  Target: {config.MONTHLY_TARGET*100:.0f}%/mo")
 
-        fig = go.Figure()
-
-        # Candlesticks
-        fig.add_trace(go.Candlestick(
-            x=df.index,
-            open=df['Open'],
-            high=df['High'],
-            low=df['Low'],
-            close=df['Close'],
-            name='Price'
-        ))
-
-        # EMAs
-        fig.add_trace(go.Scatter(
-            x=df.index, y=df['EMA20'],
-            mode='lines', name='EMA20',
-            line=dict(color='blue', width=1)
-        ))
-
-        fig.add_trace(go.Scatter(
-            x=df.index, y=df['EMA50'],
-            mode='lines', name='EMA50',
-            line=dict(color='orange', width=1)
-        ))
-
-        fig.update_layout(
-            title=f"{symbol} Price Chart",
-            yaxis_title="Price",
-            xaxis_rangeslider_visible=False,
-            height=400
-        )
-
-        return fig
-    except:
-        return go.Figure()
-
-
-def calculate_position_size(entry: float, stop: float, account: float = ACCOUNT_SIZE) -> dict:
-    """Calculate position size"""
-    if entry <= 0 or stop <= 0 or stop >= entry:
-        return {"shares": 0, "value": 0, "risk": 0}
-
-    risk_per_share = entry - stop
-    risk_amount = account * RISK_PER_TRADE
-    shares = int(risk_amount / risk_per_share)
-    value = shares * entry
-
-    return {
-        "shares": shares,
-        "value": value,
-        "risk": risk_amount
-    }
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# SIDEBAR
-# ═══════════════════════════════════════════════════════════════════════════════
-
-st.sidebar.title("📈 Trading Dashboard")
-
-# Navigation
-pages = [
+PAGES = [
     "🏠 Overview",
     "📊 Market Regime",
     "🎯 Signals",
@@ -254,1957 +122,861 @@ pages = [
     "💼 Portfolio",
     "📐 Position Calculator",
     "🔬 Signal Analysis",
-    "⚙️ Settings"
+    "🔄 Sector Rotation",
+    "🧪 Backtest Pro",
+    "📓 Journal Analytics",
+    "⚙️ Settings",
 ]
 
-selected_page = st.sidebar.selectbox("Navigate", pages)
+page = st.sidebar.selectbox("Navigate", PAGES)
 
-# System Status
+# Module status indicators in sidebar
 st.sidebar.markdown("---")
-st.sidebar.subheader("System Status")
-
-status_items = [
-    ("Signals", HAS_SIGNALS),
-    ("Fundamentals", HAS_FUNDAMENTALS),
-    ("Combined", HAS_COMBINED),
-    ("Earnings", HAS_EARNINGS),
-    ("Insider", HAS_INSIDER),
-    ("Screener", HAS_SCREENER),
-    ("Regime", HAS_REGIME),
-    ("Journal", HAS_JOURNAL),
-]
-
-for name, available in status_items:
-    emoji = "✅" if available else "❌"
-    st.sidebar.text(f"{emoji} {name}")
-
+st.sidebar.caption("Module Status")
+for _lbl, _flag in [
+    ("Signals",      HAS_GSG),
+    ("Fundamentals", HAS_FA),
+    ("Regime",       HAS_REGIME),
+    ("Journal",      HAS_JOURNAL),
+    ("Screener",     HAS_SS),
+    ("Earnings",     HAS_EARN),
+    ("Insider",      HAS_INSIDER),
+    ("Sector Rot.",  HAS_SR),
+    ("Backtester",   HAS_BT),
+]:
+    st.sidebar.text(f"{'✅' if _flag else '❌'} {_lbl}")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE: OVERVIEW
 # ═══════════════════════════════════════════════════════════════════════════════
-
-if selected_page == "🏠 Overview":
+if page == "🏠 Overview":
     st.title("🏠 Trading Dashboard Overview")
 
-    # Market Status Row
-    col1, col2, col3, col4 = st.columns(4)
+    # Account metrics
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Account Size",   f"${config.ACCOUNT_SIZE:,}")
+    c2.metric("Monthly Target", f"${config.ACCOUNT_SIZE * config.MONTHLY_TARGET:,.0f} ({config.MONTHLY_TARGET*100:.0f}%)")
+    c3.metric("Risk / Trade",   f"{config.RISK_PER_TRADE*100:.1f}%  (${config.ACCOUNT_SIZE * config.RISK_PER_TRADE:,.0f})")
+    c4.metric("Max Positions",  config.MAX_POSITIONS)
 
-    # SPY
-    if HAS_YFINANCE:
-        try:
-            spy = yf.Ticker("SPY")
-            spy_price = spy.fast_info.get('lastPrice', 0)
-            spy_change = spy.fast_info.get('regularMarketChangePercent', 0)
-            col1.metric("SPY", f"${spy_price:.2f}", f"{spy_change:.2f}%")
-        except:
-            col1.metric("SPY", "N/A", "")
+    st.markdown("---")
 
-        try:
-            vix = yf.Ticker("^VIX")
-            vix_price = vix.fast_info.get('lastPrice', 0)
-            col2.metric("VIX", f"{vix_price:.2f}", "Fear Index")
-        except:
-            col2.metric("VIX", "N/A", "")
+    # Live index snapshot
+    st.subheader("Market Indices")
+    if HAS_YF:
+        idx_cols = st.columns(4)
+        for i, (sym, label) in enumerate([("SPY","S&P 500"),("QQQ","NASDAQ 100"),("^VIX","VIX"),("^GDAXI","DAX")]):
+            try:
+                fi = _yf.Ticker(sym).fast_info
+                price = getattr(fi, "last_price", None) or getattr(fi, "regular_market_price", 0)
+                chg   = getattr(fi, "regular_market_change_percent", 0) or 0
+                idx_cols[i].metric(label, f"{price:.2f}", f"{chg:+.2f}%")
+            except Exception:
+                idx_cols[i].metric(label, "N/A")
 
-        try:
-            qqq = yf.Ticker("QQQ")
-            qqq_price = qqq.fast_info.get('lastPrice', 0)
-            qqq_change = qqq.fast_info.get('regularMarketChangePercent', 0)
-            col3.metric("QQQ", f"${qqq_price:.2f}", f"{qqq_change:.2f}%")
-        except:
-            col3.metric("QQQ", "N/A", "")
+    st.markdown("---")
 
-    # Market Regime
-    if HAS_REGIME:
-        try:
-            mrf = MarketRegimeFilter()
-            conditions = mrf.analyze()
-            regime_color = "green" if "BULL" in conditions.regime.value else "red" if "BEAR" in conditions.regime.value else "orange"
-            col4.metric("Regime", conditions.regime.value, f"{conditions.position_mult*100:.0f}% size")
-        except:
-            col4.metric("Regime", "Unknown", "")
+    # Quick scan — uses GlobalSignalGenerator with full universe across chosen markets
+    st.subheader("Quick Scan — All Markets")
+    if not HAS_GSG:
+        st.error("GlobalSignalGenerator not available.")
     else:
-        col4.metric("Regime", "N/A", "")
-
-    st.markdown("---")
-
-    # Two columns layout
-    left_col, right_col = st.columns(2)
-
-    with left_col:
-        st.subheader("📊 Quick Stats")
-
-        # Open positions
-        if HAS_JOURNAL:
-            try:
-                journal = TradeJournal()
-                open_trades = journal.get_open_trades()
-                st.metric("Open Positions", len(open_trades))
-            except:
-                st.metric("Open Positions", "N/A")
-
-        # Today's signals
-        if HAS_SIGNALS:
-            try:
-                gen = GlobalSignalGenerator()
-                signals = gen.generate_signals(markets=["US"])
-                us_signals = signals.get("US", [])
-                strong_buys = len([s for s in us_signals if s.get('signal_status') == 'STRONG BUY'])
-                st.metric("US Strong Buys", strong_buys)
-            except:
-                st.metric("US Strong Buys", "N/A")
-
-    with right_col:
-        st.subheader("📅 Upcoming Events")
-
-        if HAS_EARNINGS:
-            try:
-                ec = EarningsCalendar()
-                upcoming = ec.scan_upcoming_earnings(WATCHLIST_US[:10], days_ahead=7)
-
-                if not upcoming.empty:
-                    for _, row in upcoming.head(5).iterrows():
-                        st.text(f"📅 {row['Symbol']} - {row['Earnings Date']}")
-                else:
-                    st.info("No upcoming earnings in watchlist")
-            except:
-                st.info("Could not load earnings")
-        else:
-            st.warning("Earnings calendar not available")
-
-    # Market Status
-    st.markdown("---")
-    st.subheader("🌍 Market Status")
-
-    if HAS_MARKETS:
-        status = get_market_status()
-        cols = st.columns(3)
-
-        markets_info = [
-            ("🇺🇸 US", status.get("US", "Unknown")),
-            ("🇩🇪 Germany", status.get("DE", "Unknown")),
-            ("🇮🇳 India", status.get("IN", "Unknown"))
-        ]
-
-        for i, (name, stat) in enumerate(markets_info):
-            cols[i].metric(name, stat)
-
+        ov_markets = st.multiselect("Markets", ["US","DE","IN"], default=["US","DE","IN"], key="ov_mkts")
+        if st.button("🔍 Scan Now", type="primary"):
+            with st.spinner("Scanning all markets…"):
+                try:
+                    sigs = C["gen"].generate_signals(markets=ov_markets)
+                    all_sigs = [s for mkt_sigs in sigs.values() for s in mkt_sigs]
+                    strong = sum(1 for s in all_sigs if s.get("signal_status") == "STRONG BUY")
+                    buys   = sum(1 for s in all_sigs if s.get("signal_status") == "BUY")
+                    st.success(f"**{strong} STRONG BUY** and **{buys} BUY** across {len(ov_markets)} markets")
+                    if all_sigs:
+                        df = pd.DataFrame(all_sigs)
+                        cols = ["symbol","market","signal_status","signal_score","current_price",
+                                "ideal_entry","stop_loss","target_1","risk_reward"]
+                        st.dataframe(df[[c for c in cols if c in df.columns]],
+                                     use_container_width=True, hide_index=True)
+                except Exception as e:
+                    st.error(f"Scan error: {e}")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE: MARKET REGIME
 # ═══════════════════════════════════════════════════════════════════════════════
-
-elif selected_page == "📊 Market Regime":
+elif page == "📊 Market Regime":
     st.title("📊 Market Regime Analysis")
 
     if not HAS_REGIME:
-        st.error("Market regime module not available. Create market_regime.py")
-        st.stop()
+        st.error("market_regime module not available.")
+    else:
+        if st.button("🔄 Refresh", type="primary"):
+            st.cache_data.clear()
 
-    try:
-        mrf = MarketRegimeFilter()
-        conditions = mrf.analyze()
+        @st.cache_data(ttl=600, show_spinner="Analysing regime…")
+        def _get_regime():
+            return _mr.MarketRegimeFilter().analyze()
 
-        # Regime Status
-        col1, col2, col3, col4 = st.columns(4)
+        try:
+            cond = _get_regime()
+            regime_obj = _mr.MarketRegimeFilter()
+            tradeable, reason, confidence = regime_obj.should_trade()
 
-        regime_color = "green" if "BULL" in conditions.regime.value else "red" if "BEAR" in conditions.regime.value else "orange"
-
-        col1.metric("Current Regime", conditions.regime.value)
-        col2.metric("SPY Price", f"${conditions.spy_price:.2f}")
-        col3.metric("VIX Level", f"{conditions.vix_level:.1f}")
-        col4.metric("Position Size", f"{conditions.position_mult*100:.0f}%")
-
-        st.markdown("---")
-
-        # Details
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.subheader("📈 SPY Analysis")
-            st.write(f"**1-Day Change:** {conditions.spy_change_1d:+.2f}%")
-            st.write(f"**5-Day Change:** {conditions.spy_change_5d:+.2f}%")
-            st.write(f"**Above 50 EMA:** {'Yes ✅' if conditions.above_ema50 else 'No ❌'}")
-            st.write(f"**Above 200 EMA:** {'Yes ✅' if conditions.above_ema200 else 'No ❌'}")
-
-            # SPY Chart
-            fig = create_price_chart("SPY", "3mo")
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col2:
-            st.subheader("😰 VIX Analysis")
-
-            if conditions.vix_level < 15:
-                st.success("Low Fear - Bullish")
-            elif conditions.vix_level < 20:
-                st.info("Normal - Neutral")
-            elif conditions.vix_level < 30:
-                st.warning("Elevated - Caution")
+            gc, cc = st.columns([2, 1])
+            if tradeable:
+                gc.success(f"✅ **TRADE** — {reason}")
             else:
-                st.error("High Fear - Defensive")
+                gc.error(f"🚫 **PAUSE TRADING** — {reason}")
+            cc.metric("Confidence", f"{confidence:.0f}%")
 
-            # VIX Chart
-            fig = create_price_chart("^VIX", "3mo")
-            st.plotly_chart(fig, use_container_width=True)
-
-        # Trading Rules
-        st.markdown("---")
-        st.subheader("📋 Trading Rules Based on Regime")
-
-        if conditions.can_trade_long:
-            st.success("✅ Long trades allowed")
-        else:
-            st.error("❌ Avoid new long positions")
-
-        st.write(f"""
-        **Current Rules:**
-        - Position Size: {conditions.position_mult*100:.0f}% of normal
-        - Max Trades Per Day: {2 if conditions.position_mult >= 0.75 else 1}
-        - Risk Per Trade: {RISK_PER_TRADE * conditions.position_mult * 100:.2f}%
-        """)
-
-    except Exception as e:
-        st.error(f"Error: {e}")
-
+            st.markdown("---")
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("SPY Price",     f"${getattr(cond,'spy_price',0):.2f}")
+            m2.metric("VIX",           f"{getattr(cond,'vix',0):.1f}")
+            m3.metric("Above 50 EMA",  "✅" if cond.above_ema50  else "❌")
+            m4.metric("Above 200 EMA", "✅" if cond.above_ema200 else "❌")
+        except Exception as e:
+            st.error(f"Regime error: {e}")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# PAGE: SIGNALS
+# PAGE: SIGNALS — full multi-market, full universe, no hardcoded [:15] limit
 # ═══════════════════════════════════════════════════════════════════════════════
+elif page == "🎯 Signals":
+    st.title("🎯 Trading Signals — All Markets")
 
-elif selected_page == "🎯 Signals":
-    st.title("🎯 Trading Signals")
+    if not HAS_GSG:
+        st.error("GlobalSignalGenerator not available.")
+    else:
+        f1, f2 = st.columns(2)
+        sig_markets = f1.multiselect("Markets", ["US","DE","IN"], default=["US","DE","IN"], key="sig_mkts")
+        min_status  = f2.selectbox("Minimum strength", ["STRONG BUY","BUY","WATCH"], index=1)
 
-    if not HAS_SIGNALS:
-        st.error("Signal generator not available")
-        st.stop()
+        if st.button("⚡ Generate Signals", type="primary"):
+            with st.spinner(f"Scanning {', '.join(sig_markets)} — full ranked universe…"):
+                try:
+                    raw = C["gen"].generate_signals(markets=sig_markets)
+                    all_sigs = [s for mkt_sigs in raw.values() for s in mkt_sigs]
 
-    # Market Selection
-    markets = st.multiselect(
-        "Select Markets",
-        ["US", "DE", "IN"],
-        default=["US"]
-    )
+                    # Filter by selected minimum strength
+                    order = {"STRONG BUY": 3, "BUY": 2, "WATCH": 1, "AVOID": 0}
+                    threshold = order.get(min_status, 1)
+                    filtered = [s for s in all_sigs if order.get(s.get("signal_status","AVOID"), 0) >= threshold]
 
-    if st.button("🔄 Generate Signals", type="primary"):
-        with st.spinner("Generating signals..."):
-            try:
-                gen = GlobalSignalGenerator()
-                signals = gen.generate_signals(markets=markets)
+                    if not filtered:
+                        st.info("No signals match the selected criteria.")
+                    else:
+                        st.success(f"**{len(filtered)} signals** found")
 
-                for market, sigs in signals.items():
-                    st.subheader(f"{'🇺🇸' if market == 'US' else '🇩🇪' if market == 'DE' else '🇮🇳'} {market} Signals")
+                        # Per-market counts
+                        sm_cols = st.columns(len(sig_markets))
+                        for i, mkt in enumerate(sig_markets):
+                            sm_cols[i].metric(f"{mkt}", sum(1 for s in filtered if s.get("market") == mkt))
 
-                    if not sigs:
-                        st.info(f"No signals for {market}")
-                        continue
+                        st.markdown("---")
 
-                    # Filter by signal type
-                    strong_buys = [s for s in sigs if s.get('signal_status') == 'STRONG BUY']
-                    buys = [s for s in sigs if s.get('signal_status') == 'BUY']
+                        # Full signal table
+                        df = pd.DataFrame(filtered)
+                        show = ["symbol","name","market","signal_status","signal_score","sector",
+                                "current_price","ideal_entry","stop_loss","target_1","target_2",
+                                "risk_reward","rsi","days_to_earnings","earnings_warning"]
+                        st.dataframe(df[[c for c in show if c in df.columns]],
+                                     use_container_width=True, hide_index=True)
 
-                    col1, col2 = st.columns(2)
-                    col1.metric("Strong Buys", len(strong_buys))
-                    col2.metric("Buys", len(buys))
+                        # Detailed alert for top signal
+                        st.markdown("---")
+                        st.subheader("Top Signal Detail")
+                        best = max(filtered, key=lambda s: s.get("signal_score", 0))
+                        st.code(C["gen"].format_alert(best), language=None)
 
-                    # Display signals
-                    all_actionable = strong_buys + buys
-
-                    if all_actionable:
-                        df = pd.DataFrame([
-                            {
-                                "Symbol": s.get('symbol'),
-                                "Signal": s.get('signal_status'),
-                                "Score": s.get('signal_score', 0),
-                                "Price": f"${s.get('current_price', 0):.2f}",
-                                "Entry": f"${s.get('ideal_entry', s.get('entry', 0)):.2f}",
-                                "Stop": f"${s.get('stop_loss', 0):.2f}",
-                                "Target": f"${s.get('target_1', 0):.2f}",
-                                "R:R": f"{s.get('risk_reward', 0):.1f}",
-                            }
-                            for s in all_actionable[:20]
-                        ])
-
-                        st.dataframe(df, use_container_width=True, hide_index=True)
-
-                    st.markdown("---")
-
-            except Exception as e:
-                st.error(f"Error: {e}")
-
+                except Exception as e:
+                    st.error(f"Signal error: {e}")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE: FUNDAMENTALS
 # ═══════════════════════════════════════════════════════════════════════════════
-
-elif selected_page == "📈 Fundamentals":
+elif page == "📈 Fundamentals":
     st.title("📈 Fundamental Analysis")
 
-    if not HAS_FUNDAMENTALS:
-        st.error("Fundamental analyzer not available. Create fundamental_analyzer.py")
-        st.stop()
-
-    fa = FundamentalAnalyzer()
-
-    tab1, tab2, tab3 = st.tabs(["🔍 Single Stock", "📊 Compare Stocks", "📋 Quick Scan"])
-
-    # Tab 1: Single Stock Analysis
-    with tab1:
-        st.subheader("Single Stock Analysis")
-
-        symbol = st.text_input("Enter Symbol", "NVDA", key="fund_single").upper()
-
-        if st.button("📊 Analyze", key="fund_analyze_btn"):
-            with st.spinner(f"Analyzing {symbol}..."):
+    if not HAS_FA:
+        st.error("fundamental_analyzer module not available.")
+    else:
+        symbol = st.text_input("Symbol (e.g. NVDA, SAP.DE, TCS.NS)", "NVDA").upper().strip()
+        if st.button("Analyze"):
+            with st.spinner(f"Fetching fundamentals for {symbol}…"):
                 try:
-                    data = fa.analyze(symbol)
-
-                    if data:
-                        # Header
-                        st.markdown(f"### {data.name}")
-                        st.caption(f"{data.sector} | {data.industry}")
-
-                        # Overall Score
-                        col1, col2, col3, col4 = st.columns(4)
-                        col1.metric("Overall Score", f"{data.overall_score}/100")
-                        col2.metric("Market Cap", f"${data.market_cap/1e9:.2f}B" if data.market_cap > 1e9 else f"${data.market_cap/1e6:.0f}M")
-                        col3.metric("P/E Ratio", f"{data.pe_ratio:.2f}" if data.pe_ratio else "N/A")
-                        col4.metric("Dividend Yield", f"{data.dividend_yield:.2f}%")
-
-                        st.markdown("---")
-
-                        # Score Breakdown
-                        st.subheader("Score Breakdown")
-
-                        score_cols = st.columns(5)
-                        scores = [
-                            ("Valuation", data.valuation_score),
-                            ("Profitability", data.profitability_score),
-                            ("Growth", data.growth_score),
-                            ("Health", data.health_score),
-                            ("Quality", data.quality_score),
-                        ]
-
-                        for i, (name, score) in enumerate(scores):
-                            color = "green" if score >= 60 else "orange" if score >= 40 else "red"
-                            score_cols[i].metric(name, f"{score}/100")
-
-                        st.markdown("---")
-
-                        # Detailed Metrics
-                        col1, col2 = st.columns(2)
-
-                        with col1:
-                            st.subheader("📈 Valuation")
-                            st.write(f"P/E Ratio: {data.pe_ratio:.2f}")
-                            st.write(f"Forward P/E: {data.forward_pe:.2f}")
-                            st.write(f"PEG Ratio: {data.peg_ratio:.2f}")
-                            st.write(f"P/B Ratio: {data.pb_ratio:.2f}")
-                            st.write(f"EV/EBITDA: {data.ev_to_ebitda:.2f}")
-                            st.write(f"FCF Yield: {data.fcf_yield:.2f}%")
-
-                            st.subheader("🚀 Growth")
-                            st.write(f"Revenue Growth: {data.revenue_growth:.1f}%")
-                            st.write(f"Earnings Growth: {data.earnings_growth:.1f}%")
-
-                        with col2:
-                            st.subheader("💰 Profitability")
-                            st.write(f"Profit Margin: {data.profit_margin:.1f}%")
-                            st.write(f"Operating Margin: {data.operating_margin:.1f}%")
-                            st.write(f"Gross Margin: {data.gross_margin:.1f}%")
-                            st.write(f"ROE: {data.roe:.1f}%")
-                            st.write(f"ROA: {data.roa:.1f}%")
-
-                            st.subheader("🏦 Financial Health")
-                            st.write(f"Current Ratio: {data.current_ratio:.2f}")
-                            st.write(f"Debt/Equity: {data.debt_to_equity:.1f}")
-                            st.write(f"Interest Coverage: {data.interest_coverage:.1f}")
-
-                        # Analyst Info
-                        st.markdown("---")
-                        st.subheader("📊 Analyst Opinion")
-
-                        col1, col2, col3 = st.columns(3)
-                        col1.metric("Rating", data.analyst_rating.upper() if data.analyst_rating else "N/A")
-                        col2.metric("Target Price", f"${data.target_price_mean:.2f}" if data.target_price_mean else "N/A")
-                        col3.metric("Upside", f"{data.upside_potential:.1f}%" if data.upside_potential else "N/A")
-
+                    result = C["fa"].analyze(symbol)
+                    if result and "error" not in result:
+                        c1, c2, c3, c4 = st.columns(4)
+                        c1.metric("P/E Ratio",      result.get("pe_ratio", "N/A"))
+                        c2.metric("Revenue Growth", f"{result.get('revenue_growth',0)*100:.1f}%")
+                        c3.metric("Profit Margin",  f"{result.get('profit_margin',0)*100:.1f}%")
+                        c4.metric("Fund. Score",    f"{result.get('fundamental_score',0)}/100")
+                        st.json({k: v for k, v in result.items() if not isinstance(v, (dict, list))})
                     else:
-                        st.error(f"Could not analyze {symbol}")
-
+                        st.error(result.get("error", "No data") if result else "No result")
                 except Exception as e:
                     st.error(f"Error: {e}")
-
-    # Tab 2: Compare Stocks
-    with tab2:
-        st.subheader("Compare Stocks")
-
-        symbols_text = st.text_area(
-            "Enter symbols (one per line)",
-            "NVDA\nAMD\nINTC\nAVGO",
-            key="fund_compare"
-        )
-
-        if st.button("📊 Compare", key="fund_compare_btn"):
-            symbols = [s.strip().upper() for s in symbols_text.split("\n") if s.strip()]
-
-            if len(symbols) >= 2:
-                with st.spinner(f"Comparing {len(symbols)} stocks..."):
-                    try:
-                        df = fa.quick_scan(symbols)
-
-                        if not df.empty:
-                            st.dataframe(df, use_container_width=True, hide_index=True)
-
-                            # Highlight best
-                            best = df.loc[df['Overall'].idxmax()]
-                            st.success(f"🏆 Best Overall: **{best['Symbol']}** (Score: {best['Overall']})")
-                        else:
-                            st.error("Could not compare stocks")
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-            else:
-                st.warning("Enter at least 2 symbols")
-
-    # Tab 3: Quick Scan
-    with tab3:
-        st.subheader("Quick Scan Watchlist")
-
-        watchlist_choice = st.selectbox(
-            "Select Watchlist",
-            ["US Tech", "German DAX", "Indian Nifty", "Custom"],
-            key="fund_watchlist"
-        )
-
-        if watchlist_choice == "US Tech":
-            scan_symbols = WATCHLIST_US
-        elif watchlist_choice == "German DAX":
-            scan_symbols = WATCHLIST_DE
-        elif watchlist_choice == "Indian Nifty":
-            scan_symbols = WATCHLIST_IN
-        else:
-            custom = st.text_area("Enter symbols (one per line)", "AAPL\nMSFT\nGOOGL")
-            scan_symbols = [s.strip().upper() for s in custom.split("\n") if s.strip()]
-
-        if st.button("🔍 Scan", key="fund_scan_btn"):
-            with st.spinner(f"Scanning {len(scan_symbols)} stocks..."):
-                try:
-                    df = fa.quick_scan(scan_symbols)
-
-                    if not df.empty:
-                        st.dataframe(df, use_container_width=True, hide_index=True)
-
-                        # Top 3
-                        st.subheader("🏆 Top 3 by Fundamental Score")
-                        for _, row in df.head(3).iterrows():
-                            st.write(f"**{row['Symbol']}** - Overall: {row['Overall']}/100, Quality: {row['Quality']}/100")
-                    else:
-                        st.error("Could not scan stocks")
-                except Exception as e:
-                    st.error(f"Error: {e}")
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE: COMBINED ANALYSIS
 # ═══════════════════════════════════════════════════════════════════════════════
-
-elif selected_page == "🔀 Combined Analysis":
+elif page == "🔀 Combined Analysis":
     st.title("🔀 Combined Technical + Fundamental Analysis")
 
-    if not HAS_COMBINED:
-        st.error("Combined analyzer not available. Create combined_analyzer.py")
-        st.stop()
-
-    ca = CombinedAnalyzer()
-
-    tab1, tab2 = st.tabs(["🔍 Single Stock", "📊 Scan Watchlist"])
-
-    # Tab 1: Single Stock
-    with tab1:
-        st.subheader("Combined Analysis")
-
-        symbol = st.text_input("Enter Symbol", "NVDA", key="comb_single").upper()
-
-        if st.button("🎯 Analyze", key="comb_analyze_btn", type="primary"):
-            with st.spinner(f"Analyzing {symbol}..."):
+    if not HAS_CA:
+        st.error("combined_analyzer module not available.")
+    else:
+        symbol = st.text_input("Symbol", "AAPL").upper().strip()
+        if st.button("Analyse"):
+            with st.spinner(f"Analysing {symbol}…"):
                 try:
-                    analysis = ca.analyze(symbol)
+                    result = C["ca"].analyze(symbol)
+                    if result is not None:
+                        # ── Header ──────────────────────────────────────────
+                        quality_color = {"A+": "🟢", "A": "🟢", "B": "🟡", "C": "🟠", "D": "🔴"}.get(result.trade_quality, "⚪")
+                        st.markdown(f"## {result.name} ({result.symbol})  |  {result.sector}")
+                        st.markdown(f"### {result.recommendation}")
 
-                    if analysis:
-                        # Header with quality badge
-                        quality_colors = {"A+": "green", "A": "green", "B": "orange", "C": "orange", "D": "red"}
+                        # ── Score cards ──────────────────────────────────────
+                        c1, c2, c3, c4 = st.columns(4)
+                        c1.metric("Technical Score",   f"{result.technical_score}/100")
+                        c2.metric("Fundamental Score", f"{result.fundamental_score}/100")
+                        c3.metric("Combined Score",    f"{result.combined_score}/100")
+                        c4.metric("Trade Quality",     f"{quality_color} {result.trade_quality}")
 
-                        st.markdown(f"### {analysis.name}")
-                        st.markdown(f"**Trade Quality: {analysis.trade_quality}** | Combined Score: {analysis.combined_score}/100")
+                        st.divider()
 
-                        # Combined signal
-                        if "STRONG BUY" in analysis.combined_signal:
-                            st.success(f"🟢 {analysis.combined_signal}")
-                        elif "BUY" in analysis.combined_signal:
-                            st.info(f"🟡 {analysis.combined_signal}")
-                        elif "CAUTION" in analysis.combined_signal:
-                            st.warning(f"🟠 {analysis.combined_signal}")
-                        else:
-                            st.warning(f"⚪ {analysis.combined_signal}")
+                        # ── Trade setup ──────────────────────────────────────
+                        col_left, col_right = st.columns(2)
 
-                        st.info(analysis.recommendation)
+                        with col_left:
+                            st.subheader("📈 Trade Setup")
+                            risk = result.entry_price - result.stop_loss
+                            rr1 = (result.target_1 - result.entry_price) / risk if risk > 0 else 0
+                            rr2 = (result.target_2 - result.entry_price) / risk if risk > 0 else 0
+                            st.markdown(f"""
+| Field | Value |
+|---|---|
+| **Signal** | {result.technical_signal} |
+| **Setup** | {result.setup_type} |
+| **Trend** | {result.trend} |
+| **Current Price** | ${result.current_price:,.2f} |
+| **Entry Price** | ${result.entry_price:,.2f} |
+| **Stop Loss** | ${result.stop_loss:,.2f} ({((result.stop_loss - result.entry_price) / result.entry_price * 100):.1f}%) |
+| **Target 1** | ${result.target_1:,.2f} ({((result.target_1 - result.entry_price) / result.entry_price * 100):.1f}%) |
+| **Target 2** | ${result.target_2:,.2f} ({((result.target_2 - result.entry_price) / result.entry_price * 100):.1f}%) |
+| **R:R (T1)** | {rr1:.2f} |
+| **R:R (T2)** | {rr2:.2f} |
+| **RSI** | {result.rsi:.1f} |
+""")
 
-                        st.markdown("---")
+                        with col_right:
+                            st.subheader("🏢 Fundamental Breakdown")
+                            st.markdown(f"""
+| Metric | Score / Value |
+|---|---|
+| **Overall Fundamental** | {result.fundamental_score}/100 |
+| **Valuation** | {result.valuation_score}/100 |
+| **Profitability** | {result.profitability_score}/100 |
+| **Growth** | {result.growth_score}/100 |
+| **Financial Health** | {result.health_score}/100 |
+| **P/E Ratio** | {result.pe_ratio:.1f}x |
+| **ROE** | {result.roe * 100:.1f}% |
+| **Revenue Growth** | {result.revenue_growth:.1f}% |
+| **Debt / Equity** | {result.debt_to_equity:.2f}x |
+""")
 
-                        # Scores
-                        col1, col2, col3 = st.columns(3)
-                        col1.metric("Combined", f"{analysis.combined_score}/100")
-                        col2.metric("Technical", f"{analysis.technical_score}/100")
-                        col3.metric("Fundamental", f"{analysis.fundamental_score}/100")
-
-                        st.markdown("---")
-
-                        # Details
-                        col1, col2 = st.columns(2)
-
-                        with col1:
-                            st.subheader("📈 Technical")
-                            st.write(f"Signal: {analysis.technical_signal}")
-                            st.write(f"Setup: {analysis.setup_type}")
-                            st.write(f"RSI: {analysis.rsi:.1f}")
-                            st.write(f"Trend: {analysis.trend}")
-
-                        with col2:
-                            st.subheader("📊 Fundamental")
-                            st.write(f"P/E: {analysis.pe_ratio:.1f}")
-                            st.write(f"ROE: {analysis.roe:.1f}%")
-                            st.write(f"Revenue Growth: {analysis.revenue_growth:.1f}%")
-                            st.write(f"Debt/Equity: {analysis.debt_to_equity:.1f}")
-
-                        st.markdown("---")
-
-                        # Trade Levels
-                        st.subheader("💰 Trade Setup")
-
-                        col1, col2, col3, col4 = st.columns(4)
-                        col1.metric("Entry", f"${analysis.entry_price:.2f}")
-                        col2.metric("Stop", f"${analysis.stop_loss:.2f}")
-                        col3.metric("Target 1", f"${analysis.target_1:.2f}")
-                        col4.metric("Target 2", f"${analysis.target_2:.2f}")
-
-                        # Position sizing
-                        pos = calculate_position_size(analysis.entry_price, analysis.stop_loss)
-
-                        if pos['shares'] > 0:
-                            st.subheader("💼 Position Sizing")
-                            st.write(f"Shares: {pos['shares']}")
-                            st.write(f"Position Value: ${pos['value']:,.2f}")
-                            st.write(f"Risk Amount: ${pos['risk']:.2f}")
-
-                        # Chart
-                        st.subheader("📈 Price Chart")
-                        fig = create_price_chart(symbol)
-                        st.plotly_chart(fig, use_container_width=True)
-
+                        st.divider()
+                        st.caption(f"Combined Signal: **{result.combined_signal}**")
                     else:
-                        st.error(f"Could not analyze {symbol}")
-
+                        st.error("No result returned — check symbol or data availability.")
                 except Exception as e:
                     st.error(f"Error: {e}")
-
-    # Tab 2: Scan Watchlist
-    with tab2:
-        st.subheader("Scan Watchlist for Quality Setups")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            watchlist_choice = st.selectbox(
-                "Select Watchlist",
-                ["US Tech", "Custom"],
-                key="comb_watchlist"
-            )
-
-            if watchlist_choice == "US Tech":
-                scan_symbols = WATCHLIST_US
-            else:
-                custom = st.text_area("Enter symbols", "NVDA\nAMD\nAAPL")
-                scan_symbols = [s.strip().upper() for s in custom.split("\n") if s.strip()]
-
-        with col2:
-            min_quality = st.selectbox(
-                "Minimum Quality",
-                ["A+", "A", "B", "C"],
-                index=2,
-                key="comb_quality"
-            )
-
-        if st.button("🔍 Scan for Quality Setups", key="comb_scan_btn", type="primary"):
-            with st.spinner(f"Scanning {len(scan_symbols)} stocks..."):
-                try:
-                    results = []
-                    progress = st.progress(0)
-
-                    for i, symbol in enumerate(scan_symbols):
-                        try:
-                            analysis = ca.analyze(symbol)
-
-                            if analysis:
-                                quality_order = {"A+": 5, "A": 4, "B": 3, "C": 2, "D": 1}
-                                min_order = quality_order.get(min_quality, 3)
-
-                                if quality_order.get(analysis.trade_quality, 0) >= min_order:
-                                    results.append({
-                                        "Symbol": analysis.symbol,
-                                        "Quality": analysis.trade_quality,
-                                        "Combined": analysis.combined_score,
-                                        "Technical": analysis.technical_score,
-                                        "Fundamental": analysis.fundamental_score,
-                                        "Signal": analysis.combined_signal[:30],
-                                        "Entry": f"${analysis.entry_price:.2f}",
-                                        "Stop": f"${analysis.stop_loss:.2f}",
-                                        "Target": f"${analysis.target_1:.2f}",
-                                    })
-                        except:
-                            continue
-
-                        progress.progress((i + 1) / len(scan_symbols))
-
-                    progress.empty()
-
-                    if results:
-                        df = pd.DataFrame(results)
-                        df = df.sort_values("Combined", ascending=False)
-
-                        st.success(f"Found {len(results)} quality setups!")
-                        st.dataframe(df, use_container_width=True, hide_index=True)
-
-                        # Top pick
-                        if len(results) > 0:
-                            top = df.iloc[0]
-                            st.subheader(f"🏆 Top Pick: {top['Symbol']}")
-                            st.write(f"Quality: {top['Quality']} | Combined Score: {top['Combined']}")
-                            st.write(f"Signal: {top['Signal']}")
-                    else:
-                        st.warning("No stocks passed the quality filter")
-
-                except Exception as e:
-                    st.error(f"Error: {e}")
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE: EARNINGS CALENDAR
 # ═══════════════════════════════════════════════════════════════════════════════
-
-elif selected_page == "📅 Earnings Calendar":
+elif page == "📅 Earnings Calendar":
     st.title("📅 Earnings Calendar")
 
-    if not HAS_EARNINGS:
-        st.error("Earnings calendar not available. Create earnings_calendar.py")
-        st.stop()
-
-    ec = EarningsCalendar()
-
-    tab1, tab2, tab3 = st.tabs(["📅 Upcoming Earnings", "🔍 Check Stock", "📊 Earnings Analysis"])
-
-    # Tab 1: Upcoming Earnings
-    with tab1:
-        st.subheader("Upcoming Earnings")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            watchlist_choice = st.selectbox(
-                "Select Watchlist",
-                ["US Tech", "All Watchlist", "Custom"],
-                key="earn_watchlist"
-            )
-
-            if watchlist_choice == "US Tech":
-                scan_symbols = WATCHLIST_US
-            elif watchlist_choice == "All Watchlist":
-                scan_symbols = WATCHLIST_US + WATCHLIST_DE + WATCHLIST_IN
-            else:
-                custom = st.text_area("Enter symbols", "NVDA\nAMD\nAAPL")
-                scan_symbols = [s.strip().upper() for s in custom.split("\n") if s.strip()]
-
-        with col2:
-            days_ahead = st.slider("Days Ahead", 7, 60, 21, key="earn_days")
-
-        if st.button("📅 Scan Earnings", key="earn_scan_btn", type="primary"):
-            with st.spinner("Scanning earnings..."):
+    if not HAS_EARN:
+        st.error("earnings_calendar module not available.")
+    else:
+        days_ahead = st.slider("Days ahead", 3, 30, 14)
+        if st.button("Load Earnings"):
+            with st.spinner("Fetching…"):
                 try:
-                    df = ec.scan_upcoming_earnings(scan_symbols, days_ahead)
-
-                    if not df.empty:
-                        # This week warning
-                        this_week = df[df['Days Until'] <= 7]
-
-                        if not this_week.empty:
-                            st.warning(f"⚠️ {len(this_week)} stocks have earnings THIS WEEK!")
-                            st.dataframe(this_week, use_container_width=True, hide_index=True)
-
-                        # All upcoming
-                        st.subheader(f"All Upcoming Earnings ({len(df)} stocks)")
+                    ec = C["earn"]
+                    df = ec.get_upcoming_earnings(days=days_ahead) if hasattr(ec, "get_upcoming_earnings") else (
+                         ec.get_calendar() if hasattr(ec, "get_calendar") else pd.DataFrame())
+                    if isinstance(df, pd.DataFrame) and not df.empty:
                         st.dataframe(df, use_container_width=True, hide_index=True)
                     else:
-                        st.success("No upcoming earnings in selected watchlist")
-
+                        st.info("No earnings data returned.")
                 except Exception as e:
                     st.error(f"Error: {e}")
-
-    # Tab 2: Check Single Stock
-    with tab2:
-        st.subheader("Check Stock Earnings")
-
-        symbol = st.text_input("Enter Symbol", "NVDA", key="earn_single").upper()
-
-        if st.button("📅 Check Earnings", key="earn_check_btn"):
-            with st.spinner(f"Checking {symbol}..."):
-                try:
-                    analysis = ec.get_full_earnings_analysis(symbol)
-
-                    st.markdown(f"### {analysis['name']}")
-
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric("Next Earnings", analysis['next_earnings_date'])
-                    col2.metric("Days Until", analysis['days_until'] if analysis['days_until'] else "Unknown")
-                    col3.metric("Earnings Quality", f"{analysis['quality_emoji']} {analysis['earnings_quality']}")
-
-                    st.markdown("---")
-
-                    col1, col2 = st.columns(2)
-
-                    with col1:
-                        st.subheader("📊 Historical Performance")
-                        st.write(f"Beat Rate: {analysis['beat_rate']:.1f}%")
-                        st.write(f"Avg Surprise: {analysis['avg_surprise_pct']:+.2f}%")
-                        st.write(f"Last Surprise: {analysis['last_surprise_pct']:+.2f}%")
-                        st.write(f"Consecutive Beats: {analysis['consecutive_beats']}")
-
-                    with col2:
-                        st.subheader("💹 Price Reaction")
-                        st.write(f"Avg Move After: {analysis['avg_earnings_move_pct']:+.2f}%")
-                        st.write(f"Last Move: {analysis['last_earnings_move_pct']:+.2f}%")
-
-                    st.markdown("---")
-
-                    # Recommendation
-                    if analysis['hold_through_earnings']:
-                        st.success("✅ Generally safe to hold through earnings based on historical performance")
-                    else:
-                        st.warning("⚠️ Consider reducing position before earnings")
-
-                    if analysis['is_this_week']:
-                        st.error("⚠️ EARNINGS THIS WEEK!")
-
-                except Exception as e:
-                    st.error(f"Error: {e}")
-
-    # Tab 3: Earnings Analysis
-    with tab3:
-        st.subheader("Detailed Earnings Analysis")
-
-        symbol = st.text_input("Enter Symbol", "AAPL", key="earn_analysis").upper()
-
-        if st.button("📊 Analyze", key="earn_analysis_btn"):
-            with st.spinner(f"Analyzing {symbol}..."):
-                try:
-                    # Get earnings history
-                    hist = ec.get_earnings_history(symbol, 8)
-
-                    if not hist.empty:
-                        st.subheader("Earnings History")
-                        st.dataframe(hist, use_container_width=True)
-
-                    # Surprise stats
-                    stats = ec.get_earnings_surprise_stats(symbol)
-
-                    st.subheader("Surprise Statistics")
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric("Quarters Analyzed", stats.get('quarters_analyzed', 0))
-                    col2.metric("Beat Rate", f"{stats.get('beat_rate', 0):.1f}%")
-                    col3.metric("Avg Surprise", f"{stats.get('avg_surprise_pct', 0):+.2f}%")
-
-                except Exception as e:
-                    st.error(f"Error: {e}")
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE: INSIDER ACTIVITY
 # ═══════════════════════════════════════════════════════════════════════════════
-
-elif selected_page == "👔 Insider Activity":
-    st.title("👔 Insider Activity Tracker")
+elif page == "👔 Insider Activity":
+    st.title("👔 Insider Activity")
 
     if not HAS_INSIDER:
-        st.error("Insider tracker not available. Create insider_tracker.py")
-        st.stop()
-
-    tracker = InsiderTracker()
-
-    tab1, tab2, tab3 = st.tabs(["🔍 Check Stock", "📊 Scan Watchlist", "💰 Notable Purchases"])
-
-    # Tab 1: Check Single Stock
-    with tab1:
-        st.subheader("Check Insider Activity")
-
-        symbol = st.text_input("Enter Symbol", "NVDA", key="insider_single").upper()
-
-        if st.button("👔 Check Insider Activity", key="insider_check_btn", type="primary"):
-            with st.spinner(f"Checking {symbol}..."):
+        st.error("insider_tracker module not available.")
+    else:
+        syms_raw = st.text_area("Symbols (comma-sep)", "NVDA,AAPL,MSFT,META")
+        if st.button("Scan"):
+            syms = [s.strip().upper() for s in syms_raw.split(",") if s.strip()]
+            with st.spinner("Fetching insider transactions…"):
                 try:
-                    summary = tracker.get_insider_summary(symbol)
-
-                    if summary:
-                        st.markdown(f"### {summary.name}")
-                        st.markdown(f"Current Price: ${summary.current_price:.2f}")
-
-                        # Sentiment
-                        if summary.sentiment_score >= 50:
-                            st.success(f"🟢🟢 {summary.insider_sentiment} (Score: {summary.sentiment_score:+d})")
-                        elif summary.sentiment_score >= 20:
-                            st.success(f"🟢 {summary.insider_sentiment} (Score: {summary.sentiment_score:+d})")
-                        elif summary.sentiment_score >= -20:
-                            st.info(f"🟡 {summary.insider_sentiment} (Score: {summary.sentiment_score:+d})")
-                        elif summary.sentiment_score >= -50:
-                            st.warning(f"🔴 {summary.insider_sentiment} (Score: {summary.sentiment_score:+d})")
-                        else:
-                            st.error(f"🔴🔴 {summary.insider_sentiment} (Score: {summary.sentiment_score:+d})")
-
-                        st.markdown("---")
-
-                        # Activity Summary
-                        col1, col2 = st.columns(2)
-
-                        with col1:
-                            st.subheader("📈 Last 3 Months")
-                            st.metric("Buys", summary.buys_3m)
-                            st.metric("Buy Value", f"${summary.buy_value_3m:,.0f}")
-                            st.metric("Sells", summary.sells_3m)
-                            st.metric("Sell Value", f"${summary.sell_value_3m:,.0f}")
-
-                        with col2:
-                            st.subheader("📅 Last 12 Months")
-                            st.metric("Buys", summary.buys_12m)
-                            st.metric("Buy Value", f"${summary.buy_value_12m:,.0f}")
-                            st.metric("Sells", summary.sells_12m)
-                            st.metric("Sell Value", f"${summary.sell_value_12m:,.0f}")
-
-                        st.markdown("---")
-
-                        # Net Activity
-                        col1, col2 = st.columns(2)
-                        col1.metric("Net Shares (3M)", f"{summary.net_shares_3m:+,}")
-                        col2.metric("Net Value (3M)", f"${summary.net_value_3m:+,.0f}")
-
-                        # Cluster buying
-                        if summary.has_cluster_buying:
-                            st.success(f"🎯 CLUSTER BUYING DETECTED! ({summary.cluster_buy_count} insiders)")
-
-                        # Ownership
-                        st.markdown("---")
-                        st.subheader("👥 Ownership")
-                        col1, col2 = st.columns(2)
-                        col1.metric("Insider Ownership", f"{summary.insider_ownership_pct:.2f}%")
-                        col2.metric("Institutional", f"{summary.institutional_ownership_pct:.2f}%")
-
-                        # Recent transactions
-                        st.markdown("---")
-                        st.subheader("📋 Recent Transactions")
-
-                        transactions = tracker.get_insider_transactions(symbol, months=6)
-
-                        if transactions:
-                            tx_data = []
-                            for t in transactions[:10]:
-                                tx_data.append({
-                                    "Date": t.date,
-                                    "Type": "BUY" if t.transaction_type.value == "Buy" else "SELL",
-                                    "Insider": t.insider_name[:25],
-                                    "Shares": f"{t.shares:,}",
-                                    "Value": f"${t.value:,.0f}",
-                                    "Price": f"${t.price_per_share:.2f}"
-                                })
-
-                            st.dataframe(pd.DataFrame(tx_data), use_container_width=True, hide_index=True)
-                        else:
-                            st.info("No recent transactions found")
-                    else:
-                        st.error(f"Could not get insider data for {symbol}")
-
-                except Exception as e:
-                    st.error(f"Error: {e}")
-
-    # Tab 2: Scan Watchlist
-    with tab2:
-        st.subheader("Scan for Insider Buying")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            watchlist_choice = st.selectbox(
-                "Select Watchlist",
-                ["US Tech", "Custom"],
-                key="insider_watchlist"
-            )
-
-            if watchlist_choice == "US Tech":
-                scan_symbols = WATCHLIST_US
-            else:
-                custom = st.text_area("Enter symbols", "NVDA\nAMD\nAAPL")
-                scan_symbols = [s.strip().upper() for s in custom.split("\n") if s.strip()]
-
-        with col2:
-            min_buy_value = st.number_input("Min Buy Value ($)", 10000, 1000000, 50000, key="insider_min")
-
-        if st.button("🔍 Scan for Insider Buying", key="insider_scan_btn", type="primary"):
-            with st.spinner(f"Scanning {len(scan_symbols)} stocks..."):
-                try:
-                    df = tracker.scan_for_insider_buying(
-                        scan_symbols,
-                        min_buys=1,
-                        min_buy_value=min_buy_value,
-                        days=90
-                    )
-
-                    if not df.empty:
-                        st.success(f"Found {len(df)} stocks with insider buying!")
-                        st.dataframe(df, use_container_width=True, hide_index=True)
-
-                        # Highlight cluster buying
-                        cluster = df[df['Cluster'] == '✅']
-                        if not cluster.empty:
-                            st.subheader("🎯 Cluster Buying Detected!")
-                            st.dataframe(cluster, use_container_width=True, hide_index=True)
-                    else:
-                        st.info("No significant insider buying found")
-
-                except Exception as e:
-                    st.error(f"Error: {e}")
-
-    # Tab 3: Notable Purchases
-    with tab3:
-        st.subheader("Notable Recent Purchases")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            days_back = st.slider("Days Back", 7, 90, 30, key="insider_days")
-
-        with col2:
-            min_value = st.number_input("Min Value ($)", 50000, 5000000, 100000, key="insider_notable_min")
-
-        if st.button("💰 Find Notable Purchases", key="insider_notable_btn", type="primary"):
-            with st.spinner("Searching..."):
-                try:
-                    notable = tracker.get_recent_notable_buys(
-                        WATCHLIST_US,
-                        min_value=min_value,
-                        days=days_back
-                    )
-
-                    if notable:
-                        st.success(f"Found {len(notable)} notable purchases!")
-
-                        df = pd.DataFrame([
-                            {
-                                "Symbol": t['symbol'],
-                                "Insider": t['insider'][:30],
-                                "Date": t['date'],
-                                "Shares": f"{t['shares']:,}",
-                                "Value": f"${t['value']:,.0f}",
-                                "Price": f"${t['price']:.2f}"
-                            }
-                            for t in notable[:20]
-                        ])
-
+                    it = C["insider"]
+                    df = it.get_insider_activity(syms) if hasattr(it, "get_insider_activity") else (
+                         it.scan(syms) if hasattr(it, "scan") else pd.DataFrame())
+                    if isinstance(df, pd.DataFrame) and not df.empty:
                         st.dataframe(df, use_container_width=True, hide_index=True)
                     else:
-                        st.info("No notable purchases found")
-
+                        st.info("No insider activity found.")
                 except Exception as e:
                     st.error(f"Error: {e}")
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
-# PAGE: STOCK SCREENER
+# PAGE: STOCK SCREENER — uses full global universe, not config.STOCK_UNIVERSE[:15]
 # ═══════════════════════════════════════════════════════════════════════════════
+elif page == "🔍 Stock Screener":
+    st.title("🔍 Stock Screener")
 
-elif selected_page == "🔍 Stock Screener":
-    st.title("🔍 Fundamental Stock Screener")
+    sc1, sc2 = st.columns(2)
+    scr_markets = sc1.multiselect("Markets", ["US","DE","IN"], default=["US"], key="scr_mkts")
+    max_per_mkt = sc2.slider("Max stocks per market", 10, 100, 50, 10)
+    min_score   = st.slider("Minimum signal score", 0, 100, 60)
 
-    if not HAS_SCREENER:
-        st.error("Fundamental screener not available. Create fundamental_screener.py")
-        st.stop()
+    if st.button("Run Screener"):
+        with st.spinner("Screening…"):
+            try:
+                # Build symbol list from the global market_config universe (not the small US-only list)
+                if HAS_MC:
+                    from market_config import get_all_stocks
+                    universe = get_all_stocks(scr_markets)
+                    syms = []
+                    for mkt in scr_markets:
+                        syms.extend(universe.get(mkt, [])[:max_per_mkt])
+                else:
+                    syms = config.STOCK_UNIVERSE  # fallback — no slice
 
-    screener = FundamentalScreener()
-
-    tab1, tab2 = st.tabs(["📊 Preset Screens", "⚙️ Custom Screen"])
-
-    # Tab 1: Preset Screens
-    with tab1:
-        st.subheader("Preset Screening Strategies")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            preset = st.selectbox(
-                "Select Strategy",
-                ["Value", "Growth", "Quality", "Dividend", "GARP", "Buffett", "Lynch"],
-                key="screener_preset"
-            )
-
-        with col2:
-            watchlist_choice = st.selectbox(
-                "Select Universe",
-                ["US Tech", "S&P 500 Sample", "Custom"],
-                key="screener_universe"
-            )
-
-            if watchlist_choice == "US Tech":
-                universe = WATCHLIST_US
-            elif watchlist_choice == "S&P 500 Sample":
-                universe = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "BRK-B", "LLY",
-                           "JPM", "UNH", "V", "MA", "PG", "JNJ", "HD", "COST"]
-            else:
-                custom = st.text_area("Enter symbols", "AAPL\nMSFT\nGOOGL")
-                universe = [s.strip().upper() for s in custom.split("\n") if s.strip()]
-
-        # Strategy descriptions
-        strategies = {
-            "Value": "Low P/E, Low P/B, Undervalued stocks",
-            "Growth": "High revenue & earnings growth",
-            "Quality": "High margins, Strong ROE, Low debt",
-            "Dividend": "Dividend paying stocks with sustainable yields",
-            "GARP": "Growth at a Reasonable Price (PEG < 2)",
-            "Buffett": "Warren Buffett style - Quality + Value",
-            "Lynch": "Peter Lynch style - Low PEG, High growth"
-        }
-
-        st.info(f"**{preset}**: {strategies.get(preset, '')}")
-
-        if st.button("🔍 Run Screen", key="screener_run_btn", type="primary"):
-            with st.spinner(f"Running {preset} screen on {len(universe)} stocks..."):
-                try:
-                    preset_enum = {
-                        "Value": ScreenerPreset.VALUE,
-                        "Growth": ScreenerPreset.GROWTH,
-                        "Quality": ScreenerPreset.QUALITY,
-                        "Dividend": ScreenerPreset.DIVIDEND,
-                        "GARP": ScreenerPreset.GARP,
-                        "Buffett": ScreenerPreset.BUFFETT,
-                        "Lynch": ScreenerPreset.LYNCH,
-                    }.get(preset)
-
-                    df, results = screener.screen_with_preset(universe, preset_enum)
-
-                    if not df.empty:
-                        st.success(f"Found {len(df)} stocks passing {preset} criteria!")
-                        st.dataframe(df, use_container_width=True, hide_index=True)
-
-                        # Top pick
-                        if len(df) > 0:
-                            top = df.iloc[0]
-                            st.subheader(f"🏆 Top {preset} Pick: {top['Symbol']}")
+                if HAS_SS:
+                    results = C["screener"].screen_stocks(syms) if hasattr(C["screener"], "screen_stocks") else pd.DataFrame()
+                    if isinstance(results, pd.DataFrame) and not results.empty:
+                        score_col = "signal_score" if "signal_score" in results.columns else ("score" if "score" in results.columns else None)
+                        filtered = results[results[score_col] >= min_score] if score_col else results
+                        st.success(f"{len(filtered)} stocks passed (from {len(syms)} scanned)")
+                        st.dataframe(filtered, use_container_width=True, hide_index=True)
                     else:
-                        st.warning("No stocks passed the screening criteria")
-
-                except Exception as e:
-                    st.error(f"Error: {e}")
-
-    # Tab 2: Custom Screen
-    with tab2:
-        st.subheader("Custom Screening Criteria")
-
-        st.markdown("Set your own criteria (leave blank to ignore)")
-
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            st.markdown("**Valuation**")
-            max_pe = st.number_input("Max P/E", 0.0, 100.0, 0.0, key="cust_pe")
-            max_peg = st.number_input("Max PEG", 0.0, 5.0, 0.0, key="cust_peg")
-            max_pb = st.number_input("Max P/B", 0.0, 20.0, 0.0, key="cust_pb")
-
-        with col2:
-            st.markdown("**Profitability**")
-            min_margin = st.number_input("Min Profit Margin %", 0.0, 50.0, 0.0, key="cust_margin")
-            min_roe = st.number_input("Min ROE %", 0.0, 50.0, 0.0, key="cust_roe")
-            require_profit = st.checkbox("Require Profitable", key="cust_profit")
-
-        with col3:
-            st.markdown("**Growth & Health**")
-            min_growth = st.number_input("Min Revenue Growth %", -50.0, 100.0, 0.0, key="cust_growth")
-            max_debt = st.number_input("Max Debt/Equity", 0.0, 500.0, 0.0, key="cust_debt")
-            min_score = st.number_input("Min Overall Score", 0, 100, 0, key="cust_score")
-
-        custom_symbols = st.text_area("Symbols to screen (one per line)", "\n".join(WATCHLIST_US))
-
-        if st.button("🔍 Run Custom Screen", key="custom_screen_btn", type="primary"):
-            with st.spinner("Running custom screen..."):
-                try:
-                    from fundamental_screener import ScreenerCriteria
-
-                    criteria = ScreenerCriteria(
-                        max_pe=max_pe if max_pe > 0 else None,
-                        max_peg=max_peg if max_peg > 0 else None,
-                        max_pb=max_pb if max_pb > 0 else None,
-                        min_profit_margin=min_margin if min_margin > 0 else None,
-                        min_roe=min_roe if min_roe > 0 else None,
-                        require_profitable=require_profit,
-                        min_revenue_growth=min_growth if min_growth != 0 else None,
-                        max_debt_to_equity=max_debt if max_debt > 0 else None,
-                        min_overall_score=min_score if min_score > 0 else None,
-                    )
-
-                    symbols = [s.strip().upper() for s in custom_symbols.split("\n") if s.strip()]
-
-                    df, results = screener.screen(symbols, criteria)
-
-                    if not df.empty:
-                        st.success(f"Found {len(df)} stocks passing criteria!")
-                        st.dataframe(df, use_container_width=True, hide_index=True)
-                    else:
-                        st.warning("No stocks passed the criteria")
-
-                except Exception as e:
-                    st.error(f"Error: {e}")
-
+                        st.info("Screener returned no results.")
+                else:
+                    st.warning("StockScreener not available. Universe list:")
+                    st.write(syms)
+            except Exception as e:
+                st.error(f"Screener error: {e}")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# PAGE: TRADE JOURNAL
+# PAGE: TRADE JOURNAL — full lifecycle: log entry, close, view history
 # ═══════════════════════════════════════════════════════════════════════════════
-
-elif selected_page == "📋 Trade Journal":
+elif page == "📋 Trade Journal":
     st.title("📋 Trade Journal")
 
     if not HAS_JOURNAL:
-        st.error("Trade journal not available. Create trade_journal.py")
-        st.stop()
+        st.error("trade_journal module not available.")
+    else:
+        journal = C["journal"]
+        tab_log, tab_open, tab_closed = st.tabs(["➕ Log Entry", "📂 Open Trades", "✅ Closed Trades"])
 
-    journal = TradeJournal()
+        # ── Log a new trade entry ────────────────────────────────────────────
+        with tab_log:
+            st.subheader("Log a New Trade Entry")
+            l1, l2, l3 = st.columns(3)
+            j_sym    = l1.text_input("Symbol", "NVDA").upper()
+            j_mkt    = l2.selectbox("Market", ["US","DE","IN"])
+            j_setup  = l3.selectbox("Setup", ["PULLBACK","BREAKOUT","MOMENTUM","REVERSAL"])
 
-    tab1, tab2, tab3 = st.tabs(["📂 Open Positions", "📝 Log Trade", "📊 History"])
+            l4, l5, l6 = st.columns(3)
+            j_entry  = l4.number_input("Entry Price", value=100.0,  step=0.5, format="%.2f")
+            j_stop   = l5.number_input("Stop Loss",   value=95.0,   step=0.5, format="%.2f")
+            j_shares = l6.number_input("Shares",      value=10,     step=1,   min_value=1)
 
-    # Tab 1: Open Positions
-    with tab1:
-        st.subheader("Open Positions")
+            l7, l8, l9 = st.columns(3)
+            j_t1     = l7.number_input("Target 1",    value=110.0,  step=0.5, format="%.2f")
+            j_t2     = l8.number_input("Target 2",    value=120.0,  step=0.5, format="%.2f")
+            j_regime = l9.selectbox("Regime",         ["BULL","BEAR","SIDEWAYS","VOLATILE"])
 
-        try:
-            open_trades = journal.get_open_trades()
+            j_score  = st.slider("Signal Score", 0, 100, 65)
+            j_reason = st.text_area("Entry Reason / Notes", height=80)
 
-            if not open_trades.empty:
-                total_pnl = 0
+            if st.button("✅ Log Trade Entry", type="primary"):
+                try:
+                    tid = journal.log_entry(
+                        symbol=j_sym, entry_price=j_entry, shares=j_shares,
+                        stop_loss=j_stop, target_1=j_t1, target_2=j_t2,
+                        setup_type=j_setup, signal_score=j_score,
+                        entry_reason=j_reason, market=j_mkt,
+                        market_regime=j_regime,
+                    )
+                    st.success(f"✅ Trade #{tid} logged — {j_sym} × {j_shares} shares @ ${j_entry}")
+                except Exception as e:
+                    st.error(f"Error logging trade: {e}")
 
-                for _, t in open_trades.iterrows():
-                    symbol = t['symbol']
-                    entry = t['entry_price']
-                    shares = t['shares']
-                    stop = t['stop_loss']
-                    target = t['target_1']
-
-                    current = get_current_price(symbol) or entry
-                    pnl = (current - entry) * shares
-                    pnl_pct = (current / entry - 1) * 100 if entry > 0 else 0
-
-                    total_pnl += pnl
-
-                    emoji = "🟢" if pnl >= 0 else "🔴"
-
-                    with st.expander(f"{emoji} {symbol} - P&L: ${pnl:+.2f} ({pnl_pct:+.1f}%)"):
-                        col1, col2, col3, col4 = st.columns(4)
-                        col1.metric("Entry", f"${entry:.2f}")
-                        col2.metric("Current", f"${current:.2f}")
-                        col3.metric("Stop", f"${stop:.2f}")
-                        col4.metric("Target", f"${target:.2f}")
-
-                        st.write(f"Shares: {shares}")
-                        st.write(f"Position Value: ${current * shares:,.2f}")
-
-                        # Close trade form
-                        st.markdown("---")
-                        st.write("**Close This Trade**")
-                        close_col1, close_col2 = st.columns(2)
-                        exit_price = close_col1.number_input(
-                            "Exit Price", min_value=0.01, value=round(current, 2),
-                            key=f"exit_price_{t['id']}"
-                        )
-                        exit_reason = close_col2.selectbox(
-                            "Exit Reason",
-                            ["Target Hit", "Stop Loss", "Trailing Stop", "Manual Exit", "Time Exit"],
-                            key=f"exit_reason_{t['id']}"
-                        )
-                        if st.button(f"❌ Close {symbol}", key=f"close_{t['id']}"):
-                            try:
-                                result = journal.log_exit(
-                                    trade_id=t['id'],
-                                    exit_price=exit_price,
-                                    exit_reason=exit_reason
-                                )
-                                st.success(f"✅ {symbol} closed — P&L: ${result['pnl']:+,.2f} ({result['pnl_pct']:+.1f}%) | {result['r_multiple']:+.1f}R")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error closing trade: {e}")
-
-                st.markdown("---")
-                emoji = "🟢" if total_pnl >= 0 else "🔴"
-                st.metric(f"{emoji} Total Unrealized P&L", f"${total_pnl:+,.2f}")
-            else:
-                st.info("No open positions")
-
-        except Exception as e:
-            st.error(f"Error: {e}")
-
-    # Tab 2: Log Trade
-    with tab2:
-        st.subheader("Log New Trade")
-
-        col1, col2, col3 = st.columns(3)
-
-        symbol = col1.text_input("Symbol", "NVDA")
-        entry_price = col2.number_input("Entry Price", min_value=0.0, value=100.0)
-        shares = col3.number_input("Shares", min_value=1, value=100)
-
-        col1, col2, col3 = st.columns(3)
-        stop_loss = col1.number_input("Stop Loss", min_value=0.0, value=95.0)
-        target_1 = col2.number_input("Target 1", min_value=0.0, value=110.0)
-        target_2 = col3.number_input("Target 2", min_value=0.0, value=120.0)
-
-        setup_type = st.selectbox(
-            "Setup Type",
-            ["Breakout", "Pullback", "Support Bounce", "Earnings", "Other"]
-        )
-
-        notes = st.text_area("Notes", "")
-
-        if st.button("📝 Log Trade"):
+        # ── Open positions ───────────────────────────────────────────────────
+        with tab_open:
+            st.subheader("Open Positions")
             try:
-                trade_id = journal.log_entry(
-                    symbol=symbol,
-                    entry_price=entry_price,
-                    shares=shares,
-                    stop_loss=stop_loss,
-                    target_1=target_1,
-                    target_2=target_2,
-                    setup_type=setup_type,
-                    entry_reason=notes
-                )
-                st.success(f"✅ Trade #{trade_id} logged for {symbol}")
-                st.rerun()
+                open_df = journal.get_open_trades()
+                if open_df.empty:
+                    st.info("No open trades. Log one in the 'Log Entry' tab.")
+                else:
+                    st.dataframe(open_df, use_container_width=True, hide_index=True)
+
+                    st.markdown("---")
+                    st.subheader("Close a Position")
+                    default_id = int(open_df["id"].iloc[0]) if "id" in open_df.columns else 1
+                    close_id     = st.number_input("Trade ID", min_value=1, step=1, value=default_id)
+                    cx1, cx2     = st.columns(2)
+                    close_price  = cx1.number_input("Exit Price ($)", value=100.0, step=0.5, format="%.2f")
+                    close_reason = cx2.selectbox("Exit Reason", ["TARGET_1","TARGET_2","STOP_LOSS","TIME_EXIT","MANUAL"])
+                    cm1, cm2     = st.columns(2)
+                    close_mae    = cm1.number_input("MAE % (max adverse, negative e.g. -3.2)", value=0.0, step=0.1, format="%.2f")
+                    close_mfe    = cm2.number_input("MFE % (max favourable, positive e.g. 7.5)", value=0.0, step=0.1, format="%.2f")
+                    close_notes  = st.text_area("Lessons / Mistakes", height=60)
+
+                    if st.button("❌ Close Trade", type="primary"):
+                        try:
+                            result = journal.log_exit(
+                                trade_id=int(close_id),
+                                exit_price=close_price,
+                                exit_reason=close_reason,
+                                mae=close_mae if close_mae != 0 else None,
+                                mfe=close_mfe if close_mfe != 0 else None,
+                                lessons=close_notes,
+                            )
+                            pnl = result.get("pnl", 0)
+                            emoji = "✅" if pnl >= 0 else "❌"
+                            st.success(f"{emoji} Trade #{close_id} closed — P&L: ${pnl:+,.2f} ({result.get('r_multiple',0):+.2f}R)")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error closing trade: {e}")
             except Exception as e:
-                st.error(f"Error logging trade: {e}")
+                st.error(f"Error loading open trades: {e}")
 
-    # Tab 3: History
-    with tab3:
-        st.subheader("Trade History")
+        # ── Closed trades history ────────────────────────────────────────────
+        with tab_closed:
+            st.subheader("Closed Trades History")
+            try:
+                closed_df = journal.get_closed_trades()
+                if closed_df.empty:
+                    st.info("No closed trades yet.")
+                else:
+                    wins      = (closed_df["pnl"] > 0).sum() if "pnl" in closed_df.columns else 0
+                    total     = len(closed_df)
+                    total_pnl = closed_df["pnl"].sum() if "pnl" in closed_df.columns else 0
+                    avg_r     = closed_df["r_multiple"].mean() if "r_multiple" in closed_df.columns else 0
 
-        try:
-            closed_trades = journal.get_closed_trades()
+                    qs1, qs2, qs3, qs4 = st.columns(4)
+                    qs1.metric("Total Trades", total)
+                    qs2.metric("Win Rate",     f"{wins/total*100:.1f}%" if total else "N/A")
+                    qs3.metric("Total P&L",    f"${total_pnl:+,.2f}")
+                    qs4.metric("Avg R",        f"{avg_r:+.2f}R")
 
-            if not closed_trades.empty:
-                # Performance stats
-                col1, col2, col3, col4 = st.columns(4)
-
-                total_trades = len(closed_trades)
-                winning_trades = (closed_trades['pnl'] > 0).sum()
-                losing_trades = (closed_trades['pnl'] < 0).sum()
-                total_pnl = closed_trades['pnl'].sum()
-
-                win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
-
-                col1.metric("Total Trades", total_trades)
-                col2.metric("Win Rate", f"{win_rate:.1f}%")
-                col3.metric("Wins", winning_trades)
-                col4.metric("Losses", losing_trades)
-
-                st.metric("Total P&L", f"${total_pnl:+,.2f}")
-
-                # Trade table
-                st.dataframe(closed_trades[[
-                    'symbol', 'entry_price', 'exit_price', 'shares', 'pnl', 'pnl_pct', 'entry_date'
-                ]])
-            else:
-                st.info("No closed trades yet")
-
-        except Exception as e:
-            st.error(f"Error: {e}")
-
+                    st.dataframe(closed_df, use_container_width=True, hide_index=True)
+            except Exception as e:
+                st.error(f"Error loading closed trades: {e}")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE: PERFORMANCE
 # ═══════════════════════════════════════════════════════════════════════════════
+elif page == "📊 Performance":
+    st.title("📊 Performance Tracker")
 
-elif selected_page == "📊 Performance":
-    st.title("📊 Performance Tracking")
-
-    if not HAS_TRACKER:
-        st.error("Performance tracker not available")
-        st.stop()
-
-    tracker = PerformanceTracker()
-
-    tab1, tab2, tab3 = st.tabs(["📈 Monthly", "📊 Statistics", "📝 Summary"])
-
-    with tab1:
-        st.subheader("Monthly Performance")
-
+    if HAS_PT:
         try:
-            progress = tracker.get_monthly_progress()
-
-            if "error" not in progress:
-                st.write(f"### {progress['month']}")
-
-                col1, col2, col3, col4 = st.columns(4)
-                col1.metric("Target", f"${progress['target']:,.2f}")
-                col2.metric("Current P&L", f"${progress['current_pnl']:+,.2f}")
-                col3.metric("Progress", f"{progress['progress_pct']:.1f}%")
-                col4.metric("Remaining", f"${progress['remaining']:,.2f}")
-
-                # Progress bar
-                pct = min(max(progress['progress_pct'], 0), 100) / 100
-                st.progress(pct, text=f"{progress['progress_pct']:.1f}% of monthly target")
-
-                if progress['on_track']:
-                    st.success("✅ On track to hit monthly target")
-                else:
-                    st.warning(f"⚠️ Behind pace — {progress['trading_days_left']} trading days left")
-            else:
-                st.info("No performance data available")
-
+            progress = C["pt"].get_monthly_progress()
+            p1, p2, p3, p4 = st.columns(4)
+            p1.metric("Month P&L",  f"${progress.get('current_pnl',0):+,.2f}")
+            p2.metric("Target",     f"${progress.get('target',0):,.2f}")
+            p3.metric("Progress",   f"{progress.get('progress_pct',0):.1f}%")
+            p4.metric("Days Left",  progress.get('days_left','?'))
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.warning(f"Performance tracker: {e}")
 
-    with tab2:
-        st.subheader("Performance Statistics")
-
+    if HAS_JOURNAL:
+        st.markdown("---")
+        st.subheader("Trade Statistics")
+        days_filter = st.slider("Days to include", 7, 365, 30)
         try:
-            progress = tracker.get_monthly_progress()
-
-            if "error" not in progress:
-                col1, col2, col3, col4 = st.columns(4)
-                col1.metric("Trades This Month", progress['trades'])
-                col2.metric("Win Rate", f"{progress['win_rate']:.1f}%")
-                col3.metric("Avg R-Multiple", f"{progress['avg_r']:.2f}R")
-                col4.metric("Target %", f"{progress['target_pct']:.1f}%")
-
-                col1, col2, col3, col4 = st.columns(4)
-                col1.metric("Days Elapsed", progress['days_elapsed'])
-                col2.metric("Days Left", progress['days_left'])
-                col3.metric("Trading Days Left", progress['trading_days_left'])
-                col4.metric("Current P&L", f"${progress['current_pnl']:+,.2f}")
-
-                # Goal status
-                if progress['current_pnl'] >= progress['target']:
-                    st.success(f"✅ Monthly target achieved! (${progress['current_pnl']:+,.2f} >= ${progress['target']:,.2f})")
-                else:
-                    st.info(f"⏳ Need ${progress['remaining']:,.2f} more to reach monthly target")
+            stats = C["journal"].get_stats(days=days_filter)
+            if not stats.get("total_trades"):
+                st.info(f"No closed trades in the last {days_filter} days.")
             else:
-                st.info("No statistics available")
-
+                s1, s2, s3, s4, s5 = st.columns(5)
+                s1.metric("Trades",        stats["total_trades"])
+                s2.metric("Win Rate",      f"{stats['win_rate']:.1f}%")
+                s3.metric("Profit Factor", f"{stats['profit_factor']:.2f}")
+                s4.metric("Total P&L",     f"${stats['total_pnl']:+,.2f}")
+                s5.metric("Avg R",         f"{stats['avg_r']:+.2f}R")
         except Exception as e:
-            st.error(f"Error: {e}")
-
-    with tab3:
-        st.subheader("Performance Summary")
-
-        try:
-            progress = tracker.get_monthly_progress()
-
-            if "error" not in progress:
-                st.markdown(f"""
-**Month:** {progress['month']}
-| Metric | Value |
-|--------|-------|
-| Monthly Target | ${progress['target']:,.2f} ({progress['target_pct']:.1f}%) |
-| Current P&L | ${progress['current_pnl']:+,.2f} |
-| Progress | {progress['progress_pct']:.1f}% |
-| Trades | {progress['trades']} |
-| Win Rate | {progress['win_rate']:.1f}% |
-| Avg R-Multiple | {progress['avg_r']:.2f}R |
-| Days Left | {progress['days_left']} ({progress['trading_days_left']} trading) |
-| Status | {'✅ On Track' if progress['on_track'] else '⚠️ Behind Pace'} |
-""")
-            else:
-                st.info("No summary available")
-
-        except Exception as e:
-            st.error(f"Error: {e}")
-
+            st.error(f"Stats error: {e}")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE: PORTFOLIO
 # ═══════════════════════════════════════════════════════════════════════════════
+elif page == "💼 Portfolio":
+    st.title("💼 Portfolio Overview")
 
-elif selected_page == "💼 Portfolio":
-    st.title("💼 Portfolio Management")
-
-    tab1, tab2, tab3, tab4 = st.tabs(["💰 Summary", "📊 Positions", "⚖️ Allocation", "🎯 Risk"])
-
-    with tab1:
-        st.subheader("Portfolio Summary")
-
-        if HAS_YFINANCE:
-            try:
-                col1, col2, col3, col4 = st.columns(4)
-
-                account_value = ACCOUNT_SIZE
-                col1.metric("Account Size", f"${account_value:,.0f}")
-                col2.metric("Risk per Trade", f"{RISK_PER_TRADE * 100:.1f}%")
-                col3.metric("Max Positions", getattr(config, 'MAX_POSITIONS', 8))
-                col4.metric("Max Position Size", f"{getattr(config, 'MAX_POSITION_SIZE_PCT', 0.25) * 100:.0f}%")
-
-            except Exception as e:
-                st.error(f"Error: {e}")
-        else:
-            st.warning("YFinance not available")
-
-    with tab2:
-        st.subheader("Open Positions")
-
+    if HAS_PM:
         try:
-            if HAS_JOURNAL:
-                journal = TradeJournal()
-                open_trades = journal.get_open_trades()
-
-                if not open_trades.empty:
-                    # Calculate total
-                    total_value = 0
-                    total_pnl = 0
-
-                    positions_data = []
-
-                    for _, trade in open_trades.iterrows():
-                        symbol = trade['symbol']
-                        entry = trade['entry_price']
-                        shares = trade['shares']
-                        position_value = entry * shares
-
-                        current = get_current_price(symbol) or entry
-                        pnl = (current - entry) * shares
-                        pnl_pct = (current / entry - 1) * 100 if entry > 0 else 0
-
-                        total_value += position_value
-                        total_pnl += pnl
-
-                        positions_data.append({
-                            "Symbol": symbol,
-                            "Shares": shares,
-                            "Entry": f"${entry:.2f}",
-                            "Current": f"${current:.2f}",
-                            "P&L": f"${pnl:+.2f}",
-                            "P&L %": f"{pnl_pct:+.1f}%",
-                            "Value": f"${position_value:,.2f}"
-                        })
-
-                    st.dataframe(positions_data, use_container_width=True)
-
-                    st.markdown("---")
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric("Total Invested", f"${total_value:,.2f}")
-                    col2.metric("Unrealized P&L", f"${total_pnl:+,.2f}")
-                    col3.metric("Cash Available", f"${ACCOUNT_SIZE - total_value:,.2f}")
-                else:
-                    st.info("No open positions")
-
-            else:
-                st.warning("Trade journal not available")
-
+            summary = C["pm"].get_summary()
+            p1, p2, p3, p4 = st.columns(4)
+            p1.metric("Account",        f"${summary['account']:,}")
+            p2.metric("Open Positions", summary['open_positions'])
+            p3.metric("Invested",       f"${summary['invested']:,.2f}")
+            p4.metric("Cash",           f"${summary['cash']:,.2f}")
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Portfolio error: {e}")
 
-    with tab3:
-        st.subheader("Position Allocation")
-
-        try:
-            if HAS_JOURNAL:
-                journal = TradeJournal()
-                open_trades = journal.get_open_trades()
-
-                if not open_trades.empty:
-                    # Calculate allocation
-                    allocation_data = []
-
-                    for _, trade in open_trades.iterrows():
-                        symbol = trade['symbol']
-                        shares = trade['shares']
-                        entry = trade['entry_price']
-                        position_value = shares * entry
-                        allocation_pct = (position_value / ACCOUNT_SIZE) * 100
-
-                        allocation_data.append({
-                            "symbol": symbol,
-                            "allocation": allocation_pct
-                        })
-
-                    if allocation_data:
-                        alloc_df = pd.DataFrame(allocation_data)
-                        alloc_df = alloc_df.sort_values('allocation', ascending=False)
-
-                        fig = px.pie(
-                            alloc_df,
-                            values='allocation',
-                            names='symbol',
-                            title="Portfolio Allocation by Position"
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-
-                        st.dataframe(alloc_df)
-                else:
-                    st.info("No positions to allocate")
-
-            else:
-                st.warning("Trade journal not available")
-
-        except Exception as e:
-            st.error(f"Error: {e}")
-
-    with tab4:
-        st.subheader("Risk Analysis")
-
-        try:
-            if HAS_JOURNAL:
-                journal = TradeJournal()
-                open_trades = journal.get_open_trades()
-
-                if not open_trades.empty:
-                    total_risk = 0
-
-                    risk_data = []
-
-                    for _, trade in open_trades.iterrows():
-                        symbol = trade['symbol']
-                        entry = trade['entry_price']
-                        stop = trade['stop_loss']
-                        shares = trade['shares']
-
-                        risk_per_share = entry - stop
-                        total_risk_trade = risk_per_share * shares
-
-                        risk_pct_account = (total_risk_trade / ACCOUNT_SIZE) * 100
-
-                        total_risk += total_risk_trade
-
-                        risk_data.append({
-                            "Symbol": symbol,
-                            "Risk per Share": f"${risk_per_share:.2f}",
-                            "Total Risk": f"${total_risk_trade:+.2f}",
-                            "% of Account": f"{risk_pct_account:.2f}%"
-                        })
-
-                    st.dataframe(risk_data, use_container_width=True)
-
-                    st.markdown("---")
-                    total_risk_pct = (total_risk / ACCOUNT_SIZE) * 100
-                    col1, col2 = st.columns(2)
-                    col1.metric("Total At-Risk", f"${total_risk:+,.2f}")
-                    col2.metric("% of Account at Risk", f"{total_risk_pct:.2f}%")
-
-                    # Risk assessment
-                    if total_risk_pct <= 5:
-                        st.success("✅ Risk level is SAFE (≤5%)")
-                    elif total_risk_pct <= 10:
-                        st.warning("⚠️ Risk level is MODERATE (5-10%)")
-                    else:
-                        st.error(f"❌ Risk level is HIGH (>{10}%)")
-
-                else:
-                    st.info("No open positions - risk is 0%")
-
-            else:
-                st.warning("Trade journal not available")
-
-        except Exception as e:
-            st.error(f"Error: {e}")
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# PAGE: SIGNAL ANALYSIS
-# ═══════════════════════════════════════════════════════════════════════════════
-
-elif selected_page == "🔬 Signal Analysis":
-    st.title("🔬 Signal Analysis")
-    st.markdown("Deep-dive into exactly **why** a stock gets a STRONG BUY, BUY, or AVOID rating.")
-
-    tab1, tab2 = st.tabs(["🔍 Analyze Stock", "📋 Scoring Criteria"])
-
-    with tab2:
-        st.subheader("How Signals Are Scored (0–100)")
-
-        st.markdown("""
-| Signal | Score Threshold |
-|--------|-----------------|
-| 🟢 **STRONG BUY** | ≥ 70 |
-| 🟡 **BUY** | ≥ 60 |
-| 🟠 **WATCH** | ≥ 45 |
-| 🔴 **AVOID** | < 45 |
-""")
-
+    if HAS_JOURNAL:
         st.markdown("---")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.subheader("✅ Positive Factors")
-            st.markdown("""
-**Trend (up to +35 pts)**
-- Strong EMA alignment (8 > 21 > 50): **+20 pts**
-- EMAs bullish (partial): **+12 pts**
-- Above 50 EMA: **+10 pts**
-- ADX ≥ 25 (strong trend): **+5 pts**
-- ADX ≥ 20: **+2 pts**
-
-**Entry Timing (up to +25 pts)**
-- Pullback bounce at 21 EMA + green candle: **+25 pts**
-- Near 21 EMA + bouncing: **+18 pts**
-- Near 21 EMA (within 3%): **+10 pts**
-- 3-day momentum > 1%: **+8 pts**
-- 3-day momentum > 0%: **+4 pts**
-- Stochastic oversold (< 30): **+5 pts**
-- Stochastic turning up: **+3 pts**
-
-**Momentum (up to +20 pts)**
-- RSI 40–55 (ideal zone): **+12 pts**
-- RSI 35–60 (acceptable): **+6 pts**
-- RSI < 30 (oversold bounce): **+3 pts**
-- MACD bullish + histogram positive: **+8 pts**
-- MACD turning up: **+5 pts**
-
-**Volume (up to +10 pts)**
-- Volume ≥ 1.3× average: **+10 pts**
-- Volume ≥ 1.0× average: **+5 pts**
-- Volume ≥ 0.7× average: **+2 pts**
-""")
-
-        with col2:
-            st.subheader("❌ Negative Factors & Hard Limits")
-            st.markdown("""
-**Penalties**
-- Below 50 EMA: **−10 pts**
-- ADX < 15 (choppy market): **−5 pts**
-- Too extended from EMA (> 6%): **−10 pts**
-- 3-day momentum < −2%: **−8 pts**
-- Stochastic overbought (> 80): **−8 pts**
-- RSI overbought (> 65): **−10 pts**
-- MACD bearish + falling histogram: **−5 pts**
-- Volume < 0.7× average: **−3 pts**
-
-**Hard Disqualifiers (score capped)**
-- RSI > 70: score capped at **40**
-- Below 50 EMA: score capped at **45**
-- Price > 8% above EMA: score capped at **35**
-
-**Stop Loss Calculation**
-- Stop = 2.5× ATR below entry
-- Also checks swing low (10-day)
-- Maximum stop: 8% below entry
-
-**Targets**
-- Target 1 = entry + 1.8× risk (R:R 1.8)
-- Target 2 = entry + 3.0× risk (R:R 3.0)
-""")
-
-    with tab1:
-        st.subheader("Analyze Individual Stock")
-
-        col1, col2 = st.columns([2, 1])
-        symbol_input = col1.text_input("Stock Symbol", "NVDA", placeholder="e.g. NVDA, SAP.DE, TCS.NS")
-        analyze_btn = col2.button("🔍 Analyze", use_container_width=True)
-
-        if analyze_btn and symbol_input:
-            symbol = symbol_input.strip().upper()
-
-            with st.spinner(f"Analyzing {symbol}..."):
-                try:
-                    from global_data_fetcher import GlobalDataFetcher
-                    from technical_analyzer import TechnicalAnalyzer
-
-                    fetcher = GlobalDataFetcher()
-                    analyzer = TechnicalAnalyzer()
-
-                    df = fetcher.get_stock_data(symbol, period="6mo")
-                    info = fetcher.get_stock_info(symbol)
-
-                    if df.empty or len(df) < 50:
-                        st.error(f"Not enough data for {symbol}. Check the symbol format.")
-                    else:
-                        result = analyzer.analyze_stock(df, symbol)
-
-                        if "error" in result:
-                            st.error(f"Analysis error: {result['error']}")
-                        else:
-                            # ── Header ──
-                            status = result.get("signal_status", "AVOID")
-                            score = result.get("signal_score", 0)
-                            status_color = {"STRONG BUY": "🟢", "BUY": "🟡", "WATCH": "🟠", "AVOID": "🔴"}
-                            emoji = status_color.get(status, "🔴")
-
-                            st.markdown(f"## {emoji} {symbol} — {status} (Score: {score}/100)")
-                            st.markdown(f"**Setup:** {result.get('setup_type', 'N/A')} &nbsp;|&nbsp; "
-                                        f"**Name:** {info.get('name', symbol)} &nbsp;|&nbsp; "
-                                        f"**Sector:** {info.get('sector', 'N/A')}")
-
-                            st.markdown("---")
-
-                            # ── Score bar ──
-                            st.subheader("📊 Score Breakdown")
-                            pct = score / 100
-                            bar_color = "green" if score >= 70 else "orange" if score >= 60 else "red"
-                            st.progress(pct, text=f"{score}/100 — threshold: STRONG BUY≥70, BUY≥60, WATCH≥45")
-
-                            # ── Key metrics ──
-                            st.subheader("📈 Key Indicators")
-                            m1, m2, m3, m4, m5, m6 = st.columns(6)
-                            m1.metric("Price", f"${result.get('current_price', 0):,.2f}")
-                            m2.metric("RSI (14)", f"{result.get('rsi', 0):.1f}",
-                                      "✅ Ideal" if 40 <= result.get('rsi', 0) <= 55
-                                      else "⚠️ High" if result.get('rsi', 0) > 65 else "")
-                            m3.metric("ADX", f"{result.get('adx', 0):.1f}",
-                                      "✅ Strong" if result.get('adx', 0) >= 25
-                                      else "⚠️ Weak" if result.get('adx', 0) < 15 else "")
-                            m4.metric("Volume Ratio", f"{result.get('volume_ratio', 1):.2f}×",
-                                      "✅ High" if result.get('volume_ratio', 1) >= 1.3 else "")
-                            m5.metric("Above 50 EMA", "Yes ✅" if result.get('above_50_ema') else "No ❌")
-                            m6.metric("Above 200 EMA", "Yes ✅" if result.get('above_200_ema') else "No ❌")
-
-                            # ── Analysis reasons ──
-                            st.subheader("🔎 Scoring Reasons")
-                            reasons = result.get("analysis_reasons", [])
-                            if reasons:
-                                for reason in reasons:
-                                    if "✓" in reason:
-                                        st.success(f"✅ {reason}")
-                                    elif "✗" in reason or "SKIP" in reason:
-                                        st.error(f"❌ {reason}")
-                                    else:
-                                        st.info(f"ℹ️ {reason}")
-                            else:
-                                st.info("No detailed reasons available")
-
-                            # ── Trade levels ──
-                            if status in ["STRONG BUY", "BUY"] and result.get("ideal_entry"):
-                                st.markdown("---")
-                                st.subheader("💰 Trade Setup")
-
-                                t1, t2, t3, t4 = st.columns(4)
-                                t1.metric("Entry", f"${result.get('ideal_entry', 0):,.2f}")
-                                t2.metric("Stop Loss", f"${result.get('stop_loss', 0):,.2f}",
-                                          f"-{result.get('risk_pct', 0):.1f}%")
-                                t3.metric("Target 1", f"${result.get('target_1', 0):,.2f}",
-                                          f"R:R {result.get('rr_1', 0):.1f}×")
-                                t4.metric("Target 2", f"${result.get('target_2', 0):,.2f}",
-                                          f"R:R {result.get('rr_2', 0):.1f}×")
-
-                                # Position sizing
-                                entry_p = result.get("ideal_entry", 0)
-                                stop_p = result.get("stop_loss", 0)
-                                if entry_p and stop_p:
-                                    pos = calculate_position_size(entry_p, stop_p)
-                                    st.markdown(f"""
-**Position Sizing** (${ACCOUNT_SIZE:,} account, {RISK_PER_TRADE*100:.1f}% risk):  
-Shares: **{pos['shares']:,}** &nbsp;|&nbsp; Position Value: **${pos['value']:,.2f}** &nbsp;|&nbsp; Max Risk: **${pos['risk']:,.2f}**
-""")
-
-                            # ── Chart ──
-                            st.markdown("---")
-                            fig = create_price_chart(symbol, "3mo")
-                            st.plotly_chart(fig, use_container_width=True)
-
-                except Exception as e:
-                    st.error(f"Error analyzing {symbol}: {e}")
-
+        st.subheader("Open Positions (from Journal)")
+        try:
+            open_df = C["journal"].get_open_trades()
+            if open_df.empty:
+                st.info("No open positions in journal.")
+            else:
+                st.dataframe(open_df, use_container_width=True, hide_index=True)
+        except Exception as e:
+            st.error(f"Error: {e}")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE: POSITION CALCULATOR
 # ═══════════════════════════════════════════════════════════════════════════════
-
-elif selected_page == "📐 Position Calculator":
+elif page == "📐 Position Calculator":
     st.title("📐 Position Size Calculator")
-    st.markdown("Calculate the correct number of shares to buy based on your account size and risk tolerance.")
 
-    col1, col2 = st.columns(2)
+    method = st.radio("Sizing Method", ["Fixed Risk", "ATR-Based (volatility-adjusted)"], horizontal=True)
+    st.markdown("---")
 
-    with col1:
-        st.subheader("Trade Parameters")
-        account_size = st.number_input("Account Size ($)", min_value=1000.0, value=float(ACCOUNT_SIZE), step=1000.0)
-        risk_pct = st.slider("Risk per Trade (%)", min_value=0.1, max_value=5.0, value=float(RISK_PER_TRADE * 100), step=0.1)
-        entry_price = st.number_input("Entry Price ($)", min_value=0.01, value=100.0, step=0.01)
-        stop_loss = st.number_input("Stop Loss ($)", min_value=0.01, value=95.0, step=0.01)
-        target_1 = st.number_input("Target 1 ($)", min_value=0.01, value=110.0, step=0.01)
-        target_2 = st.number_input("Target 2 ($)", min_value=0.01, value=120.0, step=0.01)
+    pc1, pc2 = st.columns(2)
+    entry_p  = pc1.number_input("Entry Price ($)",  value=100.0, step=0.5, format="%.2f")
+    account  = pc2.number_input("Account Size ($)", value=float(config.ACCOUNT_SIZE), step=1000.0)
+    risk_pct = pc1.slider("Risk per trade (%)", 0.5, 3.0, float(config.RISK_PER_TRADE * 100), 0.1)
 
-    with col2:
-        st.subheader("Results")
+    if method == "Fixed Risk":
+        stop_p = pc2.number_input("Stop Loss ($)", value=round(entry_p * 0.95, 2), step=0.5, format="%.2f")
+        if st.button("Calculate", type="primary"):
+            rps = entry_p - stop_p
+            if rps <= 0:
+                st.error("Stop loss must be below entry.")
+            else:
+                max_risk = account * (risk_pct / 100)
+                shares = int(max_risk / rps)
+                # Cap at 25% of account
+                if shares * entry_p > account * 0.25:
+                    shares = int(account * 0.25 / entry_p)
+                value = shares * entry_p
+                a, b, c, d = st.columns(4)
+                a.metric("Shares",         shares)
+                b.metric("Position Value", f"${value:,.2f}")
+                c.metric("$ at Risk",      f"${shares * rps:,.2f}")
+                d.metric("% of Account",   f"{value/account*100:.1f}%")
 
-        if entry_price > 0 and stop_loss > 0 and stop_loss < entry_price:
-            risk_amount = account_size * (risk_pct / 100)
-            risk_per_share = entry_price - stop_loss
-            shares = int(risk_amount / risk_per_share)
-            position_value = shares * entry_price
-            position_pct = (position_value / account_size) * 100
+    else:  # ATR-Based
+        atr_val  = pc2.number_input("ATR (14-period $)", value=3.0, step=0.1, format="%.2f")
+        atr_mult = pc1.number_input("ATR Multiplier",    value=2.0, step=0.5, format="%.1f")
+        if st.button("Calculate ATR Size", type="primary"):
+            atr_stop = atr_val * atr_mult
+            if atr_stop <= 0:
+                st.error("Invalid ATR value.")
+            else:
+                max_risk = account * (risk_pct / 100)
+                shares   = int(max_risk / atr_stop)
+                if shares * entry_p > account * 0.25:
+                    shares = int(account * 0.25 / entry_p)
+                value = shares * entry_p
+                a, b, c, d = st.columns(4)
+                a.metric("Shares",         shares)
+                b.metric("Position Value", f"${value:,.2f}")
+                c.metric("Implied Stop",   f"${entry_p - atr_stop:.2f}")
+                d.metric("ATR Stop Dist.", f"${atr_stop:.2f}")
 
-            rr1 = (target_1 - entry_price) / risk_per_share if risk_per_share > 0 else 0
-            rr2 = (target_2 - entry_price) / risk_per_share if risk_per_share > 0 else 0
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE: SIGNAL ANALYSIS
+# ═══════════════════════════════════════════════════════════════════════════════
+elif page == "🔬 Signal Analysis":
+    st.title("🔬 Signal Analysis — Score Distribution")
 
-            profit_t1 = (target_1 - entry_price) * shares
-            profit_t2 = (target_2 - entry_price) * shares
-            max_loss = risk_per_share * shares
+    if not HAS_GSG:
+        st.error("GlobalSignalGenerator not available.")
+    else:
+        sa_markets = st.multiselect("Markets", ["US","DE","IN"], default=["US"], key="sa_mkts")
+        if st.button("Analyse Signals"):
+            with st.spinner("Generating signals…"):
+                try:
+                    import plotly.express as px
+                    raw = C["gen"].generate_signals(markets=sa_markets)
+                    all_sigs = [s for mkt_sigs in raw.values() for s in mkt_sigs]
+                    if all_sigs:
+                        df = pd.DataFrame(all_sigs)
+                        fig = px.histogram(df, x="signal_score", color="signal_status", nbins=20,
+                                           title="Signal Score Distribution",
+                                           color_discrete_map={"STRONG BUY":"green","BUY":"lime",
+                                                               "WATCH":"orange","AVOID":"red"})
+                        st.plotly_chart(fig, use_container_width=True)
+                        if "sector" in df.columns:
+                            fig2 = px.bar(
+                                df.groupby("sector")["signal_score"].mean().reset_index().sort_values("signal_score",ascending=False),
+                                x="sector", y="signal_score", title="Avg Score by Sector")
+                            st.plotly_chart(fig2, use_container_width=True)
+                    else:
+                        st.info("No signals generated.")
+                except Exception as e:
+                    st.error(f"Error: {e}")
 
-            col_a, col_b = st.columns(2)
-            col_a.metric("Shares to Buy", f"{shares:,}")
-            col_b.metric("Position Value", f"${position_value:,.2f}")
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE: SECTOR ROTATION
+# ═══════════════════════════════════════════════════════════════════════════════
+elif page == "🔄 Sector Rotation":
+    st.title("🔄 Sector Rotation — US Sector ETF Rankings")
+    st.caption("Relative strength vs SPY across 1W / 1Mo / 3Mo periods")
 
-            col_a, col_b = st.columns(2)
-            col_a.metric("Risk Amount", f"${risk_amount:,.2f}")
-            col_b.metric("Portfolio %", f"{position_pct:.1f}%")
+    if not HAS_SR:
+        st.error("sector_rotation module not available.")
+    else:
+        if st.button("🔄 Refresh", type="primary"):
+            st.cache_data.clear()
 
-            col_a, col_b = st.columns(2)
-            col_a.metric("Max Loss", f"-${max_loss:,.2f}")
-            col_b.metric("Risk/Share", f"${risk_per_share:.2f}")
+        @st.cache_data(ttl=900, show_spinner="Fetching sector data…")
+        def _sector_rankings():
+            return _sr.SectorRotation().compute_rankings()
 
-            st.markdown("---")
-            st.subheader("Profit Targets")
+        try:
+            df_s = _sector_rankings()
+            if df_s.empty:
+                st.warning("No sector data.")
+            else:
+                top = df_s.iloc[0]; bot = df_s.iloc[-1]
+                leading_n = len(df_s[df_s["composite_score"] >= 0])
+                m1, m2, m3 = st.columns(3)
+                m1.metric("🏆 Leading",    top["sector"], f"{top['composite_score']:+.2f}% vs SPY")
+                m2.metric("⚠️ Lagging",    bot["sector"], f"{bot['composite_score']:+.2f}% vs SPY")
+                m3.metric("Outperforming", f"{leading_n} / {len(df_s)}")
 
-            col_a, col_b = st.columns(2)
-            col_a.metric("Target 1 Profit", f"+${profit_t1:,.2f}", f"R:R {rr1:.1f}x")
-            col_b.metric("Target 2 Profit", f"+${profit_t2:,.2f}", f"R:R {rr2:.1f}x")
+                st.markdown("---")
+                disp_cols = ["rank","etf","sector","signal"] + [
+                    c for c in ["rel_1w","rel_1mo","rel_3mo","composite_score","pct_from_52wk_hi"] if c in df_s.columns]
+                st.dataframe(df_s[disp_cols].rename(columns={
+                    "rel_1w":"1W vs SPY %","rel_1mo":"1Mo vs SPY %","rel_3mo":"3Mo vs SPY %",
+                    "composite_score":"Score","pct_from_52wk_hi":"From 52wk Hi %",
+                }), use_container_width=True, hide_index=True)
 
-            st.markdown("---")
-            st.subheader("Trade Summary")
-            st.code(
-                f"Symbol:        (your stock)\n"
-                f"Entry:         ${entry_price:.2f}\n"
-                f"Stop Loss:     ${stop_loss:.2f} ({(stop_loss/entry_price - 1)*100:.1f}%)\n"
-                f"Target 1:      ${target_1:.2f} (+{(target_1/entry_price - 1)*100:.1f}%)\n"
-                f"Target 2:      ${target_2:.2f} (+{(target_2/entry_price - 1)*100:.1f}%)\n"
-                f"Shares:        {shares:,}\n"
-                f"Position:      ${position_value:,.2f} ({position_pct:.1f}% of account)\n"
-                f"Max Risk:      ${max_loss:,.2f} ({risk_pct:.1f}% of account)\n"
-                f"Target 1 R:R:  {rr1:.1f}:1\n"
-                f"Target 2 R:R:  {rr2:.1f}:1"
-            )
+                import plotly.express as px
+                fig = px.bar(df_s.sort_values("composite_score"),
+                             x="composite_score", y="sector", orientation="h",
+                             color="composite_score", color_continuous_scale=["#EF553B","gray","#00CC96"],
+                             title="Sector Relative Strength vs SPY",
+                             labels={"composite_score": "Score (excess return %)", "sector": ""})
+                fig.add_vline(x=0, line_dash="dash", line_color="white", opacity=0.5)
+                fig.update_layout(showlegend=False, height=420, coloraxis_showscale=False)
+                st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"Sector rotation error: {e}")
 
-            if rr1 < 1.5:
-                st.warning("⚠️ R:R below 1.5 — consider a better entry or wider target")
-            elif rr1 >= 2.0:
-                st.success("✅ Good risk/reward ratio")
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE: BACKTEST PRO
+# ═══════════════════════════════════════════════════════════════════════════════
+elif page == "🧪 Backtest Pro":
+    st.title("🧪 Backtest Pro")
+    st.caption("Walk-forward validation + Monte Carlo simulation")
 
-            if position_pct > 25:
-                st.warning("⚠️ Position exceeds 25% of account — consider reducing size")
-        else:
-            st.warning("Stop loss must be below entry price")
+    if not HAS_BT:
+        st.error("backtester module not available.")
+    else:
+        with st.expander("⚙️ Settings", expanded=True):
+            bs1, bs2, bs3 = st.columns(3)
+            bt_syms_raw = bs1.text_area("Symbols (comma-sep)", "NVDA,AAPL,MSFT,GOOGL,META", height=80)
+            bt_period   = bs2.selectbox("History", ["6mo","1y","2y"], index=1)
+            bt_wf_n     = bs3.slider("Walk-forward windows",  2, 6,    4)
+            bt_mc_n     = bs3.slider("Monte Carlo sims",    200, 2000, 1000, 200)
 
+        bt_symbols = [s.strip().upper() for s in bt_syms_raw.split(",") if s.strip()]
+        col_bt, col_wf, col_mc = st.columns(3)
+        run_bt = col_bt.button("▶ Run Backtest", type="primary")
+        run_wf = col_wf.button("🔀 Walk-Forward")
+        run_mc = col_mc.button("🎲 Monte Carlo")
+
+        bt = C["bt"]
+
+        if run_bt or run_mc:
+            with st.spinner("Running backtest…"):
+                try:
+                    results = bt.run_backtest(bt_symbols, period=bt_period) if hasattr(bt, "run_backtest") else bt.run(bt_symbols, period=bt_period)
+                    m1,m2,m3,m4,m5,m6 = st.columns(6)
+                    m1.metric("Trades",       getattr(results,"total_trades","-"))
+                    m2.metric("Win Rate",     f"{getattr(results,'win_rate',0):.1f}%")
+                    m3.metric("Prof.Factor",  f"{getattr(results,'profit_factor',0):.2f}")
+                    m4.metric("Max DD",       f"{getattr(results,'max_drawdown',0):.1f}%")
+                    m5.metric("Total P&L",    f"${getattr(results,'total_pnl',0):,.0f}")
+                    m6.metric("Return",       f"{getattr(results,'total_return',0):.1f}%")
+
+                    if hasattr(results,"equity_curve") and results.equity_curve:
+                        import plotly.graph_objects as go
+                        fig_eq = go.Figure(go.Scatter(y=results.equity_curve, mode="lines",
+                                                       line=dict(color="cyan", width=2)))
+                        fig_eq.update_layout(title="Equity Curve", xaxis_title="Trade #",
+                                              yaxis_title="Portfolio ($)", height=300, template="plotly_dark")
+                        st.plotly_chart(fig_eq, use_container_width=True)
+
+                    if run_mc and hasattr(bt, "monte_carlo"):
+                        with st.spinner("Monte Carlo…"):
+                            try:
+                                mc = bt.monte_carlo(results, simulations=bt_mc_n)
+                                mc1,mc2,mc3,mc4 = st.columns(4)
+                                mc1.metric("Median Return",   f"{mc.median_return:.1f}%")
+                                mc2.metric("P10 / P90",       f"{mc.p10_return:.1f}% / {mc.p90_return:.1f}%")
+                                mc3.metric("Prob Profit",     f"{mc.probability_of_profit:.1f}%")
+                                mc4.metric("Prob Ruin >25%",  f"{mc.probability_ruin:.1f}%")
+                            except Exception as mc_err:
+                                st.error(f"Monte Carlo error: {mc_err}")
+                except Exception as bt_err:
+                    st.error(f"Backtest error: {bt_err}")
+
+        if run_wf and not run_bt:
+            if not hasattr(bt, "walk_forward"):
+                st.warning("walk_forward() not available on this backtester version.")
+            else:
+                with st.spinner("Walk-forward analysis…"):
+                    try:
+                        wf_res = bt.walk_forward(bt_symbols, total_period=bt_period, n_windows=bt_wf_n)
+                        if wf_res:
+                            wf_df = pd.DataFrame([{
+                                "Window":   r.window,
+                                "Train":    f"{r.train_start} → {r.train_end}",
+                                "Test":     f"{r.test_start} → {r.test_end}",
+                                "Train WR": f"{r.train_win_rate:.1f}%",
+                                "Test WR":  f"{r.test_win_rate:.1f}%",
+                                "Test P&L": f"${r.test_pnl:,.0f}",
+                                "Trades":   r.test_trades,
+                                "Sharpe":   f"{r.sharpe:.2f}",
+                            } for r in wf_res])
+                            st.dataframe(wf_df, use_container_width=True, hide_index=True)
+
+                            import plotly.express as px
+                            fig_wf = px.line([{"Window":r.window,"Train WR%":r.train_win_rate,"Test WR%":r.test_win_rate} for r in wf_res],
+                                             x="Window", y=["Train WR%","Test WR%"],
+                                             title="Walk-Forward: Train vs Test Win Rate", markers=True)
+                            st.plotly_chart(fig_wf, use_container_width=True)
+                        else:
+                            st.warning("No walk-forward results returned.")
+                    except Exception as wf_err:
+                        st.error(f"Walk-forward error: {wf_err}")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE: JOURNAL ANALYTICS
+# ═══════════════════════════════════════════════════════════════════════════════
+elif page == "📓 Journal Analytics":
+    st.title("📓 Journal Analytics")
+    st.caption("MAE/MFE distribution, regime & setup performance breakdowns")
+
+    if not HAS_JOURNAL:
+        st.error("trade_journal module not available.")
+    else:
+        try:
+            journal  = C["journal"]
+            closed_df = journal.get_closed_trades()
+
+            if closed_df.empty:
+                st.info("No closed trades yet. Close trades in the Trade Journal page first.")
+            else:
+                tab_mf, tab_reg, tab_setup = st.tabs(["📐 MAE / MFE", "🌐 By Regime", "🎯 By Setup"])
+
+                with tab_mf:
+                    if "mae" in closed_df.columns and closed_df["mae"].notna().any():
+                        import plotly.express as px
+                        cm1, cm2 = st.columns(2)
+                        with cm1:
+                            st.plotly_chart(px.histogram(closed_df.dropna(subset=["mae"]), x="mae",
+                                title="MAE Distribution (%)", nbins=20, color_discrete_sequence=["#EF553B"]),
+                                use_container_width=True)
+                        with cm2:
+                            st.plotly_chart(px.histogram(closed_df.dropna(subset=["mfe"]), x="mfe",
+                                title="MFE Distribution (%)", nbins=20, color_discrete_sequence=["#00CC96"]),
+                                use_container_width=True)
+                        jm1, jm2 = st.columns(2)
+                        jm1.metric("Avg MAE", f"{closed_df['mae'].mean():.2f}%")
+                        jm2.metric("Avg MFE", f"{closed_df['mfe'].mean():.2f}%")
+                    else:
+                        st.info("No MAE/MFE data yet. Enter them when closing trades.")
+
+                with tab_reg:
+                    try:
+                        reg_df = journal.get_performance_by_regime()
+                        if reg_df.empty:
+                            st.info("Not enough data with regime labels.")
+                        else:
+                            st.dataframe(reg_df, use_container_width=True, hide_index=True)
+                            import plotly.express as px
+                            st.plotly_chart(px.bar(reg_df, x="market_regime", y="total_pnl",
+                                color="win_rate", color_continuous_scale="RdYlGn",
+                                title="P&L by Market Regime"), use_container_width=True)
+                    except Exception as e:
+                        st.error(f"Regime error: {e}")
+
+                with tab_setup:
+                    try:
+                        setup_df = journal.get_performance_by_setup()
+                        if setup_df.empty:
+                            st.info("Not enough data with setup labels.")
+                        else:
+                            st.dataframe(setup_df, use_container_width=True, hide_index=True)
+                            import plotly.express as px
+                            st.plotly_chart(px.bar(setup_df, x="setup_type", y="total_pnl",
+                                color="win_rate", color_continuous_scale="RdYlGn",
+                                title="P&L by Setup Type"), use_container_width=True)
+                    except Exception as e:
+                        st.error(f"Setup error: {e}")
+
+        except Exception as e:
+            st.error(f"Journal analytics error: {e}")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE: SETTINGS
 # ═══════════════════════════════════════════════════════════════════════════════
+elif page == "⚙️ Settings":
+    st.title("⚙️ System Settings")
+    st.info("Edit `config.py` to change any value, then restart the dashboard.")
 
-elif selected_page == "⚙️ Settings":
-    st.title("⚙️ Dashboard Settings")
-
-    st.markdown("### 🔧 Configuration Overview")
-
-    # Display all settings
-    st.subheader("Account Settings")
-
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric("Account Size", f"${ACCOUNT_SIZE:,}")
-    col2.metric("Risk per Trade", f"{RISK_PER_TRADE * 100:.2f}%")
-    col3.metric("Monthly Target", f"{getattr(config, 'MONTHLY_TARGET', 0.05) * 100:.1f}%")
-
-    st.subheader("Position Management")
-
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric("Max Positions", getattr(config, 'MAX_POSITIONS', 8))
-    col2.metric("Max Position Size", f"{getattr(config, 'MAX_POSITION_SIZE_PCT', 0.25) * 100:.0f}%")
-    col3.metric("Daily Loss Limit", f"{getattr(config, 'DAILY_LOSS_LIMIT', 0.02) * 100:.1f}%")
-
-    st.subheader("Technical Analysis")
-
-    # Display indicator settings
-    try:
-        indicators = getattr(config, 'INDICATORS', {})
-        thresholds = getattr(config, 'THRESHOLDS', {})
-
-        col1, col2, col3, col4 = st.columns(4)
-
-        col1.metric("EMA Fast", indicators.get('ema_fast', 8))
-        col2.metric("EMA Medium", indicators.get('ema_medium', 21))
-        col3.metric("EMA Slow", indicators.get('ema_slow', 50))
-        col4.metric("EMA Trend", indicators.get('ema_trend', 200))
-
-        col1, col2, col3, col4 = st.columns(4)
-
-        col1.metric("RSI Period", indicators.get('rsi_period', 14))
-        col2.metric("ATR Period", indicators.get('atr_period', 14))
-        col3.metric("ADX Period", indicators.get('adx_period', 14))
-        col4.metric("Volume MA", indicators.get('volume_ma_period', 20))
-
-        col1, col2, col3 = st.columns(3)
-
-        col1.metric("Min ADX", thresholds.get('min_adx', 20))
-        col2.metric("RSI Oversold", thresholds.get('rsi_oversold', 30))
-        col3.metric("RSI Overbought", thresholds.get('rsi_overbought', 70))
-
-    except Exception as e:
-        st.warning(f"Could not load all settings: {e}")
+    st.subheader("Account & Risk")
+    g1,g2,g3,g4 = st.columns(4)
+    g1.metric("Account Size",     f"${config.ACCOUNT_SIZE:,}")
+    g2.metric("Risk / Trade",     f"{config.RISK_PER_TRADE*100:.1f}%")
+    g3.metric("Max Positions",    config.MAX_POSITIONS)
+    g4.metric("Daily Loss Limit", f"{getattr(config,'DAILY_LOSS_LIMIT',0.02)*100:.0f}%")
 
     st.markdown("---")
-
-    st.subheader("📋 Stock Universe")
-
-    try:
-        universe = getattr(config, 'STOCK_UNIVERSE', [])
-        st.write(f"Total stocks in universe: **{len(universe)}**")
-
-        with st.expander("View all stocks"):
-            # Group into columns for better display
-            cols = st.columns(4)
-            for idx, symbol in enumerate(universe):
-                cols[idx % 4].write(f"• {symbol}")
-
-    except Exception as e:
-        st.warning(f"Could not load universe: {e}")
+    st.subheader("Screening Criteria")
+    sc = getattr(config,"SCREENING_CRITERIA",{})
+    s1,s2,s3 = st.columns(3)
+    s1.metric("Min Market Cap",  f"${sc.get('min_market_cap',0)/1e9:.0f}B")
+    s2.metric("Min Avg Volume",  f"{sc.get('min_avg_volume',0)/1e6:.1f}M")
+    s3.metric("ATR Range",       f"{sc.get('min_atr_pct',2)}-{sc.get('max_atr_pct',8)}%")
 
     st.markdown("---")
-
-    st.subheader("🎯 Screening Criteria")
-
-    try:
-        criteria = getattr(config, 'SCREENING_CRITERIA', {})
-
-        col1, col2, col3 = st.columns(3)
-
-        col1.metric("Min Market Cap", f"${criteria.get('min_market_cap', 5e9):,.0f}")
-        col2.metric("Min Avg Volume", f"{criteria.get('min_avg_volume', 2e6):,.0f}")
-        col3.metric("Price Range", f"${criteria.get('min_price', 10)}-${criteria.get('max_price', 1500)}")
-
-        col1, col2, col3 = st.columns(3)
-
-        col1.metric("Min Beta", f"{criteria.get('min_beta', 1.0)}")
-        col2.metric("Max Beta", f"{criteria.get('max_beta', 2.5)}")
-        col3.metric("ATR Range", f"{criteria.get('min_atr_pct', 2.0)}-{criteria.get('max_atr_pct', 8.0)}%")
-
-    except Exception as e:
-        st.warning(f"Could not load criteria: {e}")
+    st.subheader("Exit Rules")
+    er = getattr(config,"EXIT_RULES",{})
+    e1,e2,e3,e4 = st.columns(4)
+    e1.metric("Stop Loss ATR",  f"{er.get('stop_loss_atr_mult',1.75)}×")
+    e2.metric("Target 1 ATR",   f"{er.get('target_1_atr_mult',2.5)}×")
+    e3.metric("Target 2 ATR",   f"{er.get('target_2_atr_mult',4.0)}×")
+    e4.metric("Max Hold Days",  er.get("max_hold_days",10))
 
     st.markdown("---")
-
-    st.subheader("📊 Exit Rules")
-
-    try:
-        exit_rules = getattr(config, 'EXIT_RULES', {})
-
-        col1, col2, col3 = st.columns(3)
-
-        col1.metric("Stop Loss ATR Mult", f"{exit_rules.get('stop_loss_atr_mult', 2.5)}x")
-        col2.metric("Target 1 ATR Mult", f"{exit_rules.get('target_1_atr_mult', 3.5)}x")
-        col3.metric("Target 2 ATR Mult", f"{exit_rules.get('target_2_atr_mult', 5.0)}x")
-
-        col1, col2 = st.columns(2)
-
-        col1.metric("Max Hold Days", exit_rules.get('max_hold_days', 15))
-        col2.metric("Partial Exit %", f"{exit_rules.get('partial_exit_pct', 0.5) * 100:.0f}%")
-
-    except Exception as e:
-        st.warning(f"Could not load exit rules: {e}")
-
-    st.markdown("---")
-
-    st.info("ℹ️ To modify settings, edit config.py and restart the dashboard")
+    st.subheader("API Status")
+    a1,a2,a3 = st.columns(3)
+    a1.metric("Alpaca",     "✅ Set" if getattr(config,"ALPACA_API_KEY","")     else "❌ Not set")
+    a2.metric("Telegram",   "✅ Set" if getattr(config,"TELEGRAM_BOT_TOKEN","") else "❌ Not set")
+    import os
+    a3.metric("Polygon.io", "✅ Set" if os.environ.get("POLYGON_API_KEY")       else "❌ Optional")
