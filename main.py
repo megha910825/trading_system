@@ -1,5 +1,13 @@
 """Main Trading System - Entry point"""
 
+import sys as _sys, os as _os
+_APP_ROOT = _os.path.dirname(_os.path.abspath(__file__))
+for _sub in ["core", "analysis", "signals", "screening", "portfolio",
+             "strategies", "research", "automation"]:
+    _p = _os.path.join(_APP_ROOT, _sub)
+    if _p not in _sys.path:
+        _sys.path.insert(0, _p)
+
 import argparse
 from datetime import datetime
 

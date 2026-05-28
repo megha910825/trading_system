@@ -12,9 +12,9 @@
 
 | Market | Exchange | Currency | Trading Hours (Local) | Trading Hours (CET) |
 |--------|----------|----------|-----------------------|---------------------|
-| 🇺🇸 USA | NYSE/NASDAQ | USD ($) | 09:30 - 16:00 ET | 15:30 - 22:00 |
-| 🇩🇪 Germany | XETRA | EUR (€) | 09:00 - 17:30 CET | 09:00 - 17:30 |
-| 🇮🇳 India | NSE/BSE | INR (₹) | 09:15 - 15:30 IST | 04:45 - 11:00 |
+| 🇺🇸 USA | NYSE/NASDAQ | USD ($) | 09:30 – 16:00 ET | 15:30 – 22:00 |
+| 🇩🇪 Germany | XETRA | EUR (€) | 09:00 – 17:30 CET | 09:00 – 17:30 |
+| 🇮🇳 India | NSE/BSE | INR (₹) | 09:15 – 15:30 IST | 04:45 – 11:00 |
 
 ---
 
@@ -25,20 +25,21 @@
 3. [Local Installation](#-local-installation)
 4. [Quick Start](#-quick-start)
 5. [Web Dashboard](#-web-dashboard)
-6. [Daily Workflow](#-daily-workflow)
-7. [Command Reference](#-command-reference)
-8. [Understanding Signals](#-understanding-signals)
-9. [How to Place Trades](#-how-to-place-trades)
-10. [Trade Management](#-trade-management)
-11. [Backtesting](#-backtesting)
-12. [Alerts Setup](#-alerts-setup)
-13. [Environment Variables](#-environment-variables)
-14. [For Germany-Based Traders](#-for-germany-based-traders)
-15. [Architecture](#-architecture)
-16. [Changelog](#-changelog)
-17. [FAQ](#-frequently-asked-questions)
-18. [Troubleshooting](#-troubleshooting)
-19. [Glossary](#-glossary)
+6. [Weekend Investing Strategy](#-weekend-investing-mi-momentum-strategy)
+7. [Daily Workflow](#-daily-workflow)
+8. [Command Reference](#-command-reference)
+9. [Understanding Signals](#-understanding-signals)
+10. [How to Place Trades](#-how-to-place-trades)
+11. [Trade Management](#-trade-management)
+12. [Backtesting](#-backtesting)
+13. [Alerts Setup](#-alerts-setup)
+14. [Environment Variables](#-environment-variables)
+15. [For Germany-Based Traders](#-for-germany-based-traders)
+16. [Architecture](#-architecture)
+17. [Changelog](#-changelog)
+18. [FAQ](#-frequently-asked-questions)
+19. [Troubleshooting](#-troubleshooting)
+20. [Glossary](#-glossary)
 
 ---
 
@@ -55,17 +56,27 @@
 - Risk/reward ratio calculation
 - Setup types: Pullback, Momentum, Breakout
 
-### 🌐 Web Dashboard (17 Pages)
-- Professional dark-theme UI (Inter + JetBrains Mono fonts, Bloomberg-style)
+### 🌐 Web Dashboard (18 Pages)
+- **Clean light-theme UI** (Inter + JetBrains Mono fonts)
+- **Grouped sidebar navigation** — pages organised into 6 sections; two browser tabs can display different pages simultaneously via URL routing
+- **ℹ️ Info toggle on every page** — collapsible help panel for new users
 - Real-time market overview and regime analysis
 - Interactive charts with technical indicators
 - Stock scanner with custom filters
 - Trade journal with full position lifecycle
-- Portfolio management and performance metrics
+- **Live Settings editor** — edit account size, risk %, screening criteria, exit rules in-browser; changes apply immediately
 - Position size calculator and risk management
 - Sector rotation rankings
 - Walk-forward backtesting + Monte Carlo simulation
 - Journal analytics (MAE/MFE, regime & setup breakdowns)
+- **Weekend Investing (MI) strategy** — 8 presets, rebalance signals, universe ranking, backtest
+
+### 🏆 Weekend Investing (MI) Strategy
+- Full implementation of Alok Jain's Weekend Investing rotational momentum strategies
+- 8 ready-to-use strategy presets (Mi-Top10, Mi-NNF10, Mi-EverGreen, Mi-20, Mi-25, Mi-30, Mi-35, Mi-ST-ATH)
+- Multi-period momentum scoring (1M / 3M / 6M / 12M Rate of Change)
+- Automatic BUY / SELL / HOLD / CASH rebalancing signals with equal-weight allocation
+- Full universe ranking table, progress bar during scoring, walk-forward backtest
 
 ### 🧪 Backtesting
 - Walk-forward validation across configurable windows
@@ -75,7 +86,7 @@
 ### 📱 Alerts & Automation
 - Telegram and email notifications
 - Alpaca broker integration (paper & live)
-- Scheduled daily workflows via `scheduler.py`
+- Scheduled daily workflows via `automation/scheduler.py`
 
 ### 🐳 Docker-First Deployment
 - Single-command startup with `docker compose up`
@@ -86,8 +97,6 @@
 ---
 
 ## 🐳 Docker Setup (Recommended)
-
-Running via Docker is the simplest and most reliable way to run the system. No Python environment management needed.
 
 ### Prerequisites
 - [Docker Engine](https://docs.docker.com/engine/install/) 24+
@@ -115,8 +124,6 @@ docker compose up -d --build
 
 ### 3. Available Run Modes
 
-The container supports multiple modes via the `command:` field or `docker run`:
-
 | Mode | Description | Command |
 |------|-------------|---------|
 | `dashboard` | Streamlit UI on port 8501 (default) | `docker compose up` |
@@ -128,8 +135,6 @@ The container supports multiple modes via the `command:` field or `docker run`:
 
 ### 4. Data Persistence
 
-All runtime data is stored in named Docker volumes that survive container restarts:
-
 | Volume | Mounted at | Contents |
 |--------|-----------|----------|
 | `trading_data` | `/app/data` | Universe JSON, fundamentals/earnings cache |
@@ -137,19 +142,14 @@ All runtime data is stored in named Docker volumes that survive container restar
 | `trading_logs` | `/app/logs` | Application logs |
 
 ```bash
-# View volume contents
-docker run --rm -v trading_data:/data busybox ls /data
-
-# Stop without removing volumes
-docker compose down
-
-# Stop AND remove volumes (wipes all cached data)
-docker compose down -v
+docker run --rm -v trading_data:/data busybox ls /data   # Browse volume
+docker compose down                                        # Stop (keeps volumes)
+docker compose down -v                                     # Stop + wipe all data
 ```
 
 ### 5. Corporate Proxy / SSL
 
-If you're behind a corporate proxy (e.g., Zscaler), the compose file automatically mounts your host's CA certificate bundle and sets the required environment variables:
+If behind a corporate proxy (e.g., Zscaler / Zeiss), the compose file auto-mounts your host CA bundle:
 
 ```yaml
 environment:
@@ -160,7 +160,7 @@ volumes:
   - /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro
 ```
 
-No manual configuration needed — it works out of the box.
+No manual configuration needed.
 
 ### 6. Useful Docker Commands
 
@@ -169,35 +169,20 @@ docker compose ps                  # Container status + health
 docker compose logs -f             # Stream live logs
 docker compose logs --tail=50      # Last 50 log lines
 docker compose down                # Stop containers
-docker compose build               # Rebuild image after code changes
+docker compose build               # Rebuild after code changes
+docker compose cp dashboard.py dashboard:/app/dashboard.py   # Hot-patch a file
+docker compose restart dashboard   # Restart without rebuild
 ```
 
 ---
 
 ## 💻 Local Installation
 
-If you prefer to run without Docker:
-
-### Requirements
-
-| Item | Requirement |
-|------|-------------|
-| Python | 3.10+ |
-| RAM | 4 GB minimum (8 GB recommended) |
-| Storage | 500 MB free space |
-| Internet | Stable connection |
-
-### Setup
-
 ```bash
 cd ~/trading_system
-
 python -m venv venv
-source venv/bin/activate        # Linux/Mac
-# venv\Scripts\activate         # Windows
-
+source venv/bin/activate      # Linux/Mac
 pip install -r requirements.txt
-
 python -c "import config; print('✓ Config OK')"
 python main.py signals
 ```
@@ -206,39 +191,45 @@ python main.py signals
 
 ## 🚀 Quick Start
 
-### Docker (Recommended)
-
 ```bash
-docker compose up --build        # Start dashboard
-# Open http://localhost:8501
+# Docker (recommended)
+docker compose up --build     # → open http://localhost:8501
+
+# Local
+python main.py signals        # All markets
+python run_dashboard.py       # Launch dashboard
 ```
 
-### Local
-
-```bash
-python main.py signals                # All markets
-python main.py signals --market US    # US only
-python main.py analyze -s NVDA        # Analyze a stock
-python run_dashboard.py               # Launch dashboard
-```
+> **VS Code Remote SSH users:** Use the Ports tab → Forward Port 8501 to open the dashboard in your local browser.
 
 ---
 
 ## 🌐 Web Dashboard
 
-Launch with `docker compose up` or `python run_dashboard.py` → open **http://localhost:8501**
+### Navigation
 
-> **Note:** When running on a remote machine via VS Code Remote SSH, use VS Code's port forwarding (Ports tab → Forward Port 8501) to access the dashboard in your local browser.
+The sidebar contains **6 groups** of clickable page links. Each page loads via a URL parameter (`?page=…`), so two browser tabs can show different pages at the same time.
 
-### Dashboard Pages
+| Group | Pages |
+|-------|-------|
+| 📊 Market | Overview, Market Regime, Signals, Fundamentals, Combined Analysis |
+| 🔍 Research | Earnings Calendar, Insider Activity |
+| 🔧 Tools | Stock Screener, Position Calculator, Signal Analysis, Sector Rotation |
+| 💼 Portfolio | Portfolio, Trade Journal, Performance, Journal Analytics |
+| 🚀 Strategies | Backtest Pro, Weekend Investing (MI) |
+| ⚙️ System | Settings |
+
+Every page has an **ℹ️ How to use this page** expander at the top — click to read what each control does.
+
+### Pages
 
 | Page | Purpose |
 |------|---------|
-| 🏠 Overview | Account metrics, live market indices, quick scan |
-| 📊 Market Regime | SPY/VIX regime, should-trade gate with confidence score |
+| 🏠 Overview | Account metrics, live indices, quick multi-market scan |
+| 📊 Market Regime | SPY/VIX regime, should-trade gate with confidence % |
 | 🎯 Signals | Live multi-market signals, filterable by strength |
 | 📈 Fundamentals | P/E, ROE, revenue growth, fundamental score |
-| 🔀 Combined Analysis | Technical + fundamental combined score with trade quality (A+ to D) |
+| 🔀 Combined Analysis | Technical + fundamental score with trade quality (A+ to D) |
 | 📅 Earnings Calendar | Upcoming earnings dates with risk flags |
 | 👔 Insider Activity | Recent insider buy/sell transactions |
 | 🔍 Stock Screener | Custom filter screener across all markets |
@@ -246,40 +237,82 @@ Launch with `docker compose up` or `python run_dashboard.py` → open **http://l
 | 📊 Performance | Monthly P&L progress, win rate, stats |
 | 💼 Portfolio | Open positions, allocation, cash summary |
 | 📐 Position Calculator | Fixed-risk and ATR-based position sizing |
-| 🔬 Signal Analysis | Score distribution charts by sector |
-| 🔄 Sector Rotation | US sector ETF relative strength vs SPY |
+| 🔬 Signal Analysis | Score distribution charts — gauge market breadth |
+| 🔄 Sector Rotation | US sector ETF relative strength vs SPY (1W / 1Mo / 3Mo) |
 | 🧪 Backtest Pro | Walk-forward + Monte Carlo simulation |
-| 📓 Journal Analytics | MAE/MFE, performance by regime & setup |
-| ⚙️ Settings | Configuration display, API status |
+| 📓 Journal Analytics | MAE/MFE, performance by regime & setup type |
+| 🏆 Weekend Investing (MI) | Momentum rebalancing — 8 strategy presets |
+| ⚙️ Settings | Live-editable config: account, risk, screener, exit rules |
 
-### UI Design
+### Settings Page
 
-The dashboard uses a professional dark theme:
-- **Color palette:** Deep navy background (`#07090f`), cyan-blue accents (`#00b4d8`)
-- **Typography:** Inter (UI) + JetBrains Mono (numbers/prices)
-- **Metric cards:** Glass-effect with hover glow
-- **Signal badges:** Color-coded (green STRONG BUY → red AVOID)
-- **Score gauges:** Animated bars with dynamic color thresholds (≥60 green, ≥40 amber, <40 red)
+All key values are editable in-browser:
+- **Account & Risk:** Account size, monthly target %, risk/trade %, max positions, daily loss limit
+- **Screening Criteria:** Min market cap, min avg volume, ATR range
+- **Exit Rules:** Stop-loss ATR multiplier, Target 1/2 ATR multipliers, max hold days
+
+Click **💾 Save Changes** — values are written to `config.py` and apply to all pages immediately (no restart). API keys remain read-only; edit `.env` then `docker compose restart`.
+
+---
+
+## 🏆 Weekend Investing (MI) Momentum Strategy
+
+Full implementation of [Alok Jain's Weekend Investing](https://weekendinvesting.com) rotational momentum system.
+
+### How it works
+
+**Momentum Score** (composite of 4 ROC periods):
+
+```
+Score = (ROC_1M + ROC_3M + ROC_6M + ROC_12M) / 4
+```
+
+- **Entry:** Buy top-N stocks by score at next market open (Monday for weekly; first trading day of month for monthly) at equal weight.
+- **Exit:** Sell only when a stock drops out of the top-N at the next rebalancing date — no intra-period stop-loss.
+- **Cash proxy:** When absolute momentum filter is active (Mi-25/Mi-30) and a stock's 6-month return is negative, park that slot in LIQUIDBEES.
+
+### Strategy Presets
+
+| Strategy | Universe | Slots | Rebalance | Special |
+|----------|----------|-------|-----------|---------|
+| Mi-Top10 | Nifty 50 | 10 | Weekly | — |
+| Mi-NNF10 | Nifty Next 50 | 10 | Weekly | — |
+| Mi-EverGreen | CNX 200 | 20 | Weekly | Risk-adjusted, 12-1 momentum |
+| Mi-20 | MidSmall 400 | 20 | Weekly | — |
+| Mi-25 | Smallcap 250 | 25 | Monthly | Cash filter (abs. momentum) |
+| Mi-30 | CNX 500 | 30 | Monthly | Cash filter (abs. momentum) |
+| Mi-35 | Smallcap 250 | 35 | Weekly | — |
+| Mi-ST-ATH | CNX 500 | 15 | Weekly | ATH filter (within 10% of 52wk high) |
+
+### Weekly Usage
+
+1. Dashboard → **🏆 Weekend Investing (MI)**
+2. Select strategy, enter capital, enter current holdings (comma-separated symbols)
+3. Click **Generate Rebalance Signal**
+4. Execute ✅ BUY and ❌ SELL at **Monday 9:15 AM IST**
+
+Key rules: Never override a SELL. Equal weight every slot. Park 🟡 CASH slots in LIQUIDBEES.
+
+### CLI
+
+```bash
+python strategies/weekend_investing_strategy.py --strategy Mi-35 --capital 500000
+```
 
 ---
 
 ## 📅 Daily Workflow
 
-### Schedule (CET for Germany-Based Traders)
+| Time (CET) | Action |
+|------------|--------|
+| 08:00 | Morning — India signals, prep German market |
+| 09:00 | 🇩🇪 German market opens — place orders |
+| 11:00 | 🇮🇳 India closes — review positions |
+| 15:30 | 🇺🇸 US opens — generate US signals |
+| 17:30 | 🇩🇪 German market closes |
+| 22:00 | 🇺🇸 US closes — log trades, review |
+| **Sunday** | Weekly MI rebalance + universe update |
 
-| Time | Action | Command |
-|------|--------|---------|
-| 08:00 | Morning routine — check India signals, prep German market | `python daily_workflow.py morning` |
-| 09:00 | 🇩🇪 German market opens — place orders, set stops | |
-| 11:00 | 🇮🇳 India market closes — review positions | |
-| 12:00 | Midday check — review German positions | `python daily_workflow.py midday` |
-| 15:30 | 🇺🇸 US market opens — generate US signals | `python daily_workflow.py afternoon` |
-| 17:30 | 🇩🇪 German market closes | |
-| 20:00 | Evening summary — log trades, review | `python daily_workflow.py evening` |
-| 22:00 | 🇺🇸 US market closes — final review | |
-| **Sunday** | Weekly universe update | `python main.py quick-update` |
-
-With Docker, one-shot commands run via:
 ```bash
 docker compose run --rm dashboard signals
 docker compose run --rm dashboard update
@@ -302,23 +335,28 @@ python main.py status                  # Market status
 ```bash
 python main.py quick-update            # Quick update (~10 min)
 python main.py update-universe         # Full update (~30 min)
-python main.py universe                # Show current stocks
-python main.py universe --market DE    # Show German stocks
+python main.py universe --market IN    # Indian stocks
 ```
 
 ### Backtesting
 ```bash
-python backtester.py run               # Test current universe
-python backtester.py compare           # Compare all markets
-python backtester.py run -p 2y         # 2-year backtest
+python strategies/backtester.py run           # Test current universe
+python strategies/backtester.py run -p 2y    # 2-year backtest
+python strategies/backtester.py compare      # Compare all markets
+```
+
+### Weekend Investing
+```bash
+python strategies/weekend_investing_strategy.py --strategy Mi-Top10 --capital 500000
+python strategies/weekend_investing_strategy.py --strategy Mi-35   --capital 1750000
 ```
 
 ### Daily Workflow
 ```bash
-python daily_workflow.py morning
-python daily_workflow.py midday
-python daily_workflow.py afternoon
-python daily_workflow.py evening
+python automation/daily_workflow.py morning
+python automation/daily_workflow.py midday
+python automation/daily_workflow.py afternoon
+python automation/daily_workflow.py evening
 ```
 
 ### Symbol Format
@@ -333,8 +371,6 @@ python daily_workflow.py evening
 
 ## 🎯 Understanding Signals
 
-### Signal Types
-
 | Signal | Meaning | Action |
 |--------|---------|--------|
 | 🟢 STRONG BUY | Excellent setup, high confidence | Consider trading |
@@ -344,89 +380,39 @@ python daily_workflow.py evening
 
 ### Combined Analysis Trade Quality
 
-| Grade | Combined Score | Meaning |
-|-------|---------------|---------|
-| A+ | ≥ 80 (both tech & fund ≥ 70) | Excellent — full position |
+| Grade | Score | Meaning |
+|-------|-------|---------|
+| A+ | ≥ 80 (both ≥ 70) | Excellent — full position |
 | A  | ≥ 70 (both ≥ 60) | Good — standard position |
 | B  | ≥ 60 (both ≥ 50) | Acceptable — reduced size |
 | C  | ≥ 50 | Marginal — small size only |
 | D  | < 50 | Avoid |
 
-### Reading a Signal
-```
-🎯 STRONG BUY: NVDA (Score: 75/100)
-   Setup: PULLBACK | Trend: BULLISH ✓
-
-   💰 TRADE SETUP:
-   Entry:    $235.00
-   Stop:     $223.00 (-5.1%)
-   Target 1: $259.00 (+10.2%)
-   Target 2: $275.00 (+17.0%)
-   R:R: 2.0 | Shares: 62
-```
-
 ---
 
 ## 💰 How to Place Trades
 
-### 1. Get the Signal
-```bash
-python main.py signals --market US
-# or use the 🎯 Signals page in the dashboard
-```
-
-### 2. Position Sizing (Automatic)
-```
-Risk Amount  = Account × 1.5% = $50,000 × 0.015 = $750
-Risk/Share   = Entry - Stop   = $235 - $223      = $12
-Shares       = $750 ÷ $12    = 62 shares
-```
-
-### 3. Place Orders in Your Broker
-1. **Buy:** Limit order at entry price
-2. **Stop Loss:** Stop order at stop price (set immediately!)
-3. **Alert:** Set price alert at Target 1
-
-### 4. Manage the Trade
-- **Target 1 hit:** Sell half, move stop to breakeven
-- **Target 2 hit:** Sell remaining shares
-- **Stop hit:** Accept the loss, move on
+1. **Get the signal** — 🎯 Signals page or `python main.py signals`
+2. **Size the position** — 📐 Position Calculator (auto-enforces 1.5% risk, 25% cap)
+3. **Place orders** — Limit buy at entry; stop immediately after fill
+4. **Target 1 hit** — Sell half, move stop to breakeven
+5. **Target 2 hit** — Sell remainder
 
 ---
 
 ## 📊 Trade Management
 
-### Trading Rules
-- **Always** use stop loss — set immediately after buy fills
-- Max **1.5% risk** per trade
-- Max **8 positions** total, **4 per market**
-- Max **25%** of account in one stock
-- Sell 50% at Target 1, move stop to breakeven
-
-### Trade Journal (Dashboard)
-Use the **📋 Trade Journal** page to:
-- Log new trade entries with full setup details
-- View all open positions
-- Close positions with exit price, reason, MAE/MFE, and lessons learned
-- Review closed trades history with win rate and R-multiple stats
+- **Always** set stop loss immediately after buy fills
+- Max **1.5% risk** per trade, max **8 positions** total, max **25%** in one stock
+- Log every trade in 📋 Trade Journal for performance tracking
 
 ---
 
 ## 🧪 Backtesting
 
-### Via Dashboard (Backtest Pro page)
-- Configure symbols, history period, walk-forward windows, Monte Carlo simulations
-- View equity curve, trade stats, walk-forward train vs. test win rate chart
+Go to **🧪 Backtest Pro** in the dashboard — enter symbols, period, walk-forward windows, Monte Carlo count → **Run Backtest**.
 
-### Via CLI
-```bash
-python backtester.py run              # Default 1-year
-python backtester.py run -p 6mo       # 6 months
-python backtester.py run -p 2y        # 2 years
-python backtester.py compare          # All markets side by side
-```
-
-### Interpreting Results
+A strategy is viable only if Walk-Forward CAGR > 0 **and** Monte Carlo 5th-percentile is still positive.
 
 | Metric | Excellent | Good | Acceptable | Poor |
 |--------|-----------|------|------------|------|
@@ -438,30 +424,18 @@ python backtester.py compare          # All markets side by side
 
 ## 🔔 Alerts Setup
 
-### Telegram (Recommended)
-1. Message `@BotFather` → `/newbot` → copy API token
-2. Message `@userinfobot` → copy your Chat ID
-3. Add to `.env`:
-   ```
-   TELEGRAM_BOT_TOKEN=your-token
-   TELEGRAM_CHAT_ID=your-chat-id
-   ```
+### Telegram
+1. Message `@BotFather` → `/newbot` → copy token
+2. Message `@userinfobot` → copy Chat ID
+3. Add to `.env`: `TELEGRAM_BOT_TOKEN=…` and `TELEGRAM_CHAT_ID=…`
 
 ### Email (Gmail)
-1. Enable 2-Step Verification in Google Account
-2. Create App Password (Security → App Passwords)
-3. Add to `.env`:
-   ```
-   EMAIL_SENDER=your@gmail.com
-   EMAIL_PASSWORD=xxxx xxxx xxxx xxxx
-   EMAIL_RECEIVER=your@gmail.com
-   ```
+1. Enable 2-Step Verification → create App Password
+2. Add to `.env`: `EMAIL_SENDER`, `EMAIL_PASSWORD`, `EMAIL_RECEIVER`
 
 ---
 
 ## 🔐 Environment Variables
-
-Copy `.env.example` to `.env` and fill in your values:
 
 ```bash
 # Broker (Alpaca) — leave empty for simulation mode
@@ -469,30 +443,21 @@ ALPACA_API_KEY=""
 ALPACA_SECRET_KEY=""
 ALPACA_BASE_URL="https://paper-api.alpaca.markets"
 
-# Telegram Notifications (optional)
+# Telegram (optional)
 TELEGRAM_BOT_TOKEN="your-bot-token"
 TELEGRAM_CHAT_ID="your-chat-id"
 
-# Email Notifications (optional)
+# Email (optional)
 EMAIL_SENDER="your@gmail.com"
 EMAIL_PASSWORD="your-app-password"
 EMAIL_RECEIVER="recipient@gmail.com"
 ```
 
-The `.env` file is **never committed to git** (excluded via `.gitignore`).
-When running with Docker, it is loaded automatically via `env_file: .env` in `docker-compose.yml`.
+`.env` is never committed to git. With Docker it loads automatically via `env_file: .env`.
 
 ---
 
 ## 🇩🇪 For Germany-Based Traders
-
-### Your Advantage
-Trade 3 markets across different time zones from a single system:
-- **04:45–11:00** 🇮🇳 India (morning opportunity)
-- **09:00–17:30** 🇩🇪 Germany (primary market)
-- **15:30–22:00** 🇺🇸 USA (afternoon/evening)
-
-### Recommended Allocation
 
 | Market | Positions | Portfolio % | Priority |
 |--------|-----------|-------------|----------|
@@ -500,123 +465,145 @@ Trade 3 markets across different time zones from a single system:
 | 🇺🇸 USA | 3 | 40% | Secondary |
 | 🇮🇳 India | 1–2 | 10% | Optional |
 
-### Broker Options
+**Brokers:** Interactive Brokers (all 3 markets), Trade Republic (DE + US, €1/trade), Scalable Capital (DE + US, €0.99/trade)
 
-| Broker | Markets | Fees |
-|--------|---------|------|
-| Interactive Brokers | All 3 markets | Low, varies |
-| Trade Republic | DE + US | €1/trade |
-| Scalable Capital | DE + US | €0.99/trade |
-
-### Tax Notes
-- **Abgeltungssteuer:** ~26.4% (25% + Soli + church tax)
-- **Freibetrag:** €1,000/year tax-free
-- Use Freistellungsauftrag with your broker
+**Tax:** Abgeltungssteuer ~26.4%; Freibetrag €1,000/year — file Freistellungsauftrag with your broker.
 
 ---
 
 ## 🏗️ Architecture
 
-### File Structure
+### Module Structure
+
 ```
 trading_system/
-├── Dockerfile                 # Production Docker image (python:3.11-slim)
-├── docker-compose.yml         # Compose: dashboard + optional scheduler service
-├── entrypoint.sh              # Container entrypoint (dashboard/scheduler/scanner/…)
-├── .dockerignore              # Excludes .git, cache, logs from image
 │
-├── config.py                  # System configuration (account, risk, indicators)
-├── market_config.py           # Market definitions (US, DE, IN stocks & parameters)
+├── config.py                  # System configuration (account, risk, params)
+├── market_config.py           # Market definitions (US/DE/IN stocks & params)
 ├── main.py                    # CLI entry point
-│
-├── global_data_fetcher.py     # Multi-market data fetching (yfinance)
-├── global_universe_manager.py # Stock universe ranking & selection
-├── global_signal_generator.py # Signal generation across markets
-│
-├── technical_analyzer.py      # Technical analysis (EMA, RSI, ATR, etc.)
-├── fundamental_analyzer.py    # Fundamental analysis with sector benchmarks
-├── combined_analyzer.py       # Technical + fundamental combined scoring
-├── market_regime.py           # SPY/VIX regime classification
-│
-├── position_manager.py        # Position sizing & risk management
-├── trade_journal.py           # Trade logging (SQLite)
-├── performance_tracker.py     # Monthly performance tracking
-├── backtester.py              # Walk-forward backtesting + Monte Carlo
-│
-├── alert_system.py            # Telegram & email alerts
-├── broker_api.py              # Alpaca broker integration
-├── earnings_calendar.py       # Earnings date tracking
-├── insider_tracker.py         # Insider transaction tracking
-├── sector_rotation.py         # Sector ETF relative strength rankings
-│
-├── dashboard.py               # Streamlit web dashboard (17 pages, dark theme)
+├── dashboard.py               # Streamlit web dashboard (18 pages, light theme)
 ├── run_dashboard.py           # Local dashboard launcher
-├── daily_workflow.py          # Scheduled daily routines
-├── scheduler.py               # Task scheduling (signals + universe update)
-├── logging_setup.py           # Centralized logging with colored output
+├── logging_setup.py           # Centralized logging
 │
-├── data/                      # Universe JSON, rankings CSV, fundamentals cache
+├── core/                      # Data fetching & universe management
+│   ├── data_fetcher.py
+│   ├── global_data_fetcher.py
+│   └── global_universe_manager.py
+│
+├── analysis/                  # Market & stock analysis
+│   ├── technical_analyzer.py
+│   ├── fundamental_analyzer.py
+│   ├── combined_analyzer.py
+│   ├── market_regime.py
+│   └── sector_rotation.py
+│
+├── signals/                   # Signal generation
+│   ├── signal_generator.py
+│   └── global_signal_generator.py
+│
+├── screening/                 # Stock screeners
+│   ├── stock_screener.py
+│   └── fundamental_screener.py
+│
+├── portfolio/                 # Position & trade management
+│   ├── position_manager.py
+│   ├── trade_journal.py
+│   ├── performance_tracker.py
+│   ├── broker_api.py
+│   └── alert_system.py
+│
+├── strategies/                # Trading strategies
+│   ├── backtester.py
+│   ├── swing_trading_system.py
+│   └── weekend_investing_strategy.py
+│
+├── research/                  # Market research
+│   ├── earnings_calendar.py
+│   └── insider_tracker.py
+│
+├── automation/                # Scheduling & daily routines
+│   ├── scheduler.py
+│   └── daily_workflow.py
+│
+├── Dockerfile                 # python:3.11-slim-bookworm, non-root trader user
+├── docker-compose.yml         # Dashboard + optional scheduler profile
+├── entrypoint.sh              # Multi-mode container entrypoint
+├── .dockerignore
+│
+├── data/                      # Universe JSON, rankings, fundamentals cache
 ├── logs/                      # Application logs
 ├── cache/                     # Price data cache
-├── .env                       # API keys (not committed to git)
-├── .env.example               # Template for .env
-└── requirements.txt           # Python dependencies
+├── .env                       # API keys (not committed)
+└── requirements.txt
 ```
+
+### Import Architecture
+
+`dashboard.py` and `main.py` add all 8 subdirectories to `sys.path` at startup. Every module continues to use flat imports (`from technical_analyzer import TechnicalAnalyzer`) with no changes — no package-style imports needed.
 
 ---
 
 ## 📝 Changelog
 
-### May 2026 — Docker & UI Overhaul
+### May 2026 — Module Restructure, UI Overhaul, Weekend Investing
+
+#### 📁 Module Restructure
+- All Python modules organised into 8 subdirectories: `core/`, `analysis/`, `signals/`, `screening/`, `portfolio/`, `strategies/`, `research/`, `automation/`
+- `sys.path` bootstrap in `dashboard.py` and `main.py` — all flat imports continue to work unchanged
+- `__init__.py` added to each subdirectory
+
+#### 🌐 Dashboard — Navigation & UX
+- **Replaced dropdown** with grouped HTML sidebar nav — all 18 pages visible at a glance, direct click
+- **URL-based routing** (`?page=…`) — two browser tabs can show different pages simultaneously
+- **ℹ️ Info expander** on every page — collapsible help panel explaining controls and recommended actions
+- Renamed nav group "Intel" → "Research"
+
+#### ⚙️ Settings Page — Live Editable
+- Account size, risk %, monthly target, screening criteria, exit rules all editable in-browser
+- **Save Changes** writes to `config.py` and updates the live module in-memory — effective immediately across all pages
+- API key fields remain read-only
+
+#### 🏆 Weekend Investing (MI) Strategy
+- New `strategies/weekend_investing_strategy.py` with 8 presets
+- Multi-period ROC scoring, absolute momentum cash proxy, ATH filter
+- Dashboard page: 4 tabs — Rebalance Now, Universe Ranking, Backtest, Strategy Guide
+
+#### 🎨 Dashboard UI — Light Theme
+- Switched from dark to clean light theme (`#f0f4f8` background, white cards)
+- Fixed all widget label, input, and markdown text color issues
+- Removed overly-broad CSS selectors (`.stApp *`, bare `span`, `[class*="css"]`) that caused Streamlit internal elements to render visibly
+- Multiselect tags: blue chip style
+- Expander text scoped via `[data-testid="stMarkdownContainer"]` — internal Streamlit icons unaffected
 
 #### 🐳 Docker
-- **Production `Dockerfile`** — `python:3.11-slim-bookworm` base, non-root `trader` user, corporate proxy SSL support via `--trusted-host` pip flags
-- **`docker-compose.yml`** — `dashboard` service (port 8501) + optional `scheduler` service (activated with `--profile scheduler`); named volumes for `data`, `cache`, `logs`; corporate CA bundle auto-mounted; health check on `/_stcore/health`
-- **`entrypoint.sh`** — multi-mode entrypoint: `dashboard` | `scheduler` | `scanner` | `signals` | `update` | `shell`
-- **`.dockerignore`** — excludes `.git`, `cache/`, `logs/`, `data/`, dev files for lean image
-
-#### 🎨 Dashboard UI
-- **Professional dark theme** — Inter + JetBrains Mono fonts, `#07090f` background, `#00b4d8` accent, Bloomberg-style radial gradients
-- **Metric cards** — glass-effect with blue border, uppercase labels, monospace values, hover glow
-- **Sidebar** — branded header, account/target summary card, glowing dot module status indicators
-- **Buttons** — primary: blue gradient with lift-on-hover; secondary: ghost style
-- **Tabs, inputs, dropdowns, sliders, expanders, scrollbars** — all consistently styled
-- **Combined Analysis page** — full-width stock header banner, color-coded signal badges, animated score gauge bars with dynamic threshold colors (green ≥60, amber ≥40, red <40), trade quality pill
-
-#### 🔧 Previous fixes (May 2026)
-- Added 15+ missing config fields (`SCREENING_CRITERIA`, `EXIT_RULES`, etc.)
-- Universe expanded to 50 stocks per market (145 total)
-- Error handling improved throughout all modules
-- Dashboard expanded from 12 to 17 pages (Sector Rotation, Backtest Pro, Journal Analytics, Insider Activity, Earnings Calendar added)
-- Trade Journal UI: full close-trade flow with MAE/MFE tracking
+- `Dockerfile`: `python:3.11-slim-bookworm`, non-root `trader` user, `--trusted-host` pip flags
+- `docker-compose.yml`: named volumes, CA bundle mount (Zscaler/corporate proxy), health check, optional `scheduler` profile
+- `entrypoint.sh`: `dashboard` | `scheduler` | `scanner` | `signals` | `update` | `shell`
 
 ---
 
 ## ❓ Frequently Asked Questions
 
 **How do I run it?**
-Docker is recommended: `docker compose up --build` → open http://localhost:8501.
+`docker compose up --build` → http://localhost:8501 (forward port 8501 via VS Code Ports tab if on remote SSH).
+
+**How do I change account size or risk settings?**
+⚙️ Settings page → edit in-browser → Save Changes.
+
+**How do I use the Weekend Investing strategy?**
+🏆 Weekend Investing (MI) → select strategy → enter capital → Generate Rebalance Signal → execute at Monday 9:15 AM IST.
 
 **How much money do I need?**
-Configured for $50,000 (changeable in `config.py`). Minimum $5,000 recommended for proper position sizing.
-
-**Is this guaranteed to make money?**
-No. This targets 4% monthly returns but losses are possible. Always use stop losses.
+Configured for $50,000 (changeable in Settings). Minimum $5,000 recommended.
 
 **Do I need to watch the market all day?**
-No — swing trading. Check signals morning/evening, place orders, set stops. Trades last 2–10 days.
+No — swing trading. Check signals morning/evening. Trades last 2–10 days.
 
 **How do I update the stock list?**
-Run `python main.py quick-update` or `docker compose run --rm dashboard update` weekly.
+`docker compose run --rm dashboard update` (weekly).
 
 **Can I add my own stocks?**
 Edit `market_config.py` (`US_STOCKS`, `GERMAN_STOCKS`, `INDIAN_STOCKS`).
-
-**What does "PULLBACK" setup mean?**
-Stock is trending up but temporarily dipped to support — a buying opportunity.
-
-**Should I trade every signal?**
-No. Focus on STRONG BUY signals and A/A+ combined analysis grades. Start with 1–3 positions.
 
 ---
 
@@ -624,14 +611,14 @@ No. Focus on STRONG BUY signals and A/A+ combined analysis grades. Start with 1�
 
 | Issue | Solution |
 |-------|----------|
-| Dashboard not reachable in browser | If on VS Code Remote SSH, forward port 8501 via the PORTS tab |
-| SSL / certificate errors in Docker | Ensure `/etc/ssl/certs/ca-certificates.crt` exists on host; it is auto-mounted by compose |
-| `No result returned` in Combined Analysis | SSL cert issue — restart with `docker compose down && docker compose up` after confirming CA fix |
-| Container exits immediately | Check `docker compose logs` for the error; likely missing `.env` |
-| No data for symbol | Check format (NVDA, SAP.DE, TCS.NS). Yahoo Finance may be temporarily down |
-| Slow performance | Use `quick-update` instead of full update; reduce stock count in `market_config.py` |
-| Package install fails (local) | `python -m pip install --upgrade pip && pip install -r requirements.txt` |
-| Config errors | `python -c "import config; print('OK')"` to verify |
+| Dashboard not reachable | VS Code Remote SSH: forward port 8501 via the Ports tab |
+| SSL / certificate errors | Ensure `/etc/ssl/certs/ca-certificates.crt` exists on host; auto-mounted by compose |
+| `No result returned` in Combined Analysis | SSL issue — `docker compose down && docker compose up` |
+| Container exits immediately | `docker compose logs` — likely missing `.env` |
+| Settings save fails | Check `config.py` is writable; container needs write access to `/app/config.py` |
+| Import errors after restructure | `sys.path` bootstrap resolves all subdirectory imports automatically |
+| No data for symbol | Check format (NVDA, SAP.DE, TCS.NS). Yahoo Finance may be temporarily unavailable |
+| Package install fails (local) | `pip install --upgrade pip && pip install -r requirements.txt` |
 
 ---
 
@@ -640,22 +627,26 @@ No. Focus on STRONG BUY signals and A/A+ combined analysis grades. Start with 1�
 | Term | Definition |
 |------|------------|
 | ATR | Average True Range — daily price movement measure |
+| Absolute Momentum | Exit to cash when asset's own past return turns negative |
 | Drawdown | Decline from peak to trough |
 | EMA | Exponential Moving Average |
-| MAE | Maximum Adverse Excursion — worst drawdown during a trade |
-| MFE | Maximum Favourable Excursion — best gain during a trade |
-| Momentum | Strength of price movement in one direction |
-| Position Size | Number of shares to buy |
+| LIQUIDBEES | Indian liquid ETF used as a cash proxy in MI strategies |
+| MAE | Maximum Adverse Excursion — worst drawdown during a live trade |
+| MFE | Maximum Favourable Excursion — best gain reached during a live trade |
+| MI Strategy | Weekend Investing — Alok Jain's rotational momentum strategy |
+| Momentum | Rate of Change (ROC) of price over 1M, 3M, 6M, 12M periods |
+| Position Size | Shares to buy, sized to risk exactly N% of account |
 | Profit Factor | Gross profit ÷ gross loss |
-| Pullback | Temporary dip in an uptrend |
+| Pullback | Temporary dip in an uptrend — buying opportunity |
 | R:R | Risk/Reward ratio |
-| RSI | Relative Strength Index (overbought/oversold) |
+| ROC | Rate of Change — % price change over a given period |
+| RSI | Relative Strength Index |
 | Sharpe Ratio | Return per unit of risk |
-| Stop Loss | Auto-sell order to limit losses |
+| Stop Loss | Auto-sell order that caps loss to a pre-defined amount |
 | Swing Trading | Holding stocks for days to weeks |
-| Universe | List of stocks being tracked |
-| Walk-Forward | Out-of-sample backtest validation across rolling windows |
-| Win Rate | Percentage of profitable trades |
+| Universe | List of stocks actively tracked and scored |
+| Walk-Forward | Out-of-sample backtest on data the model never trained on |
+| Win Rate | Percentage of trades that closed profitably |
 
 ---
 
@@ -667,8 +658,7 @@ Trading involves substantial risk of loss. This software is for educational and 
 
 ## 🎓 Getting Started Path
 
-1. **Day 1:** `docker compose up --build` → explore the dashboard
-2. **Week 1:** Paper trade — run signals daily, track what you would have traded
-3. **Week 2–3:** Small positions — half size, STRONG BUY + A/A+ grade only, max 2 positions
-4. **Week 4+:** Normal trading — full size, up to 8 positions, weekly journal review
-
+1. **Day 1:** `docker compose up --build` → explore dashboard, read ℹ️ help on each page
+2. **Week 1:** Paper trade — run signals daily, log what you would have traded in the Trade Journal
+3. **Week 2–3:** Small live positions — half size, STRONG BUY + A/A+ grade only, max 2 positions
+4. **Week 4+:** Normal trading — full size, up to 8 positions, weekly journal review + MI rebalance
