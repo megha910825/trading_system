@@ -12,7 +12,8 @@ import numpy as np
 from datetime import datetime
 from typing import Dict, List
 
-# ── Sector ETF universe ────────────────────────────────────────────────────────
+# ── Sector ETF universes (per market) ──────────────────────────────────────────
+# US sector SPDR ETFs — benchmark SPY
 SECTOR_ETFS: Dict[str, str] = {
     "XLK":  "Technology",
     "XLF":  "Financials",
@@ -27,7 +28,40 @@ SECTOR_ETFS: Dict[str, str] = {
     "XLU":  "Utilities",
 }
 
-BENCHMARK = "SPY"
+# German / European sector ETFs (STOXX Europe 600 iShares, XETRA) — benchmark EXS1.DE (Core DAX)
+DE_SECTOR_ETFS: Dict[str, str] = {
+    "EXV3.DE": "Technology",
+    "EXV1.DE": "Banks",
+    "EXV4.DE": "Health Care",
+    "EXV7.DE": "Industrials",
+    "EXV6.DE": "Oil & Gas",
+    "EXV2.DE": "Retail / Consumer",
+    "EXH8.DE": "Utilities",
+    "EXV5.DE": "Basic Materials",
+    "EXV9.DE": "Autos & Parts",
+    "EXXT.DE": "Technology (STOXX)",
+}
+
+# Indian sector ETFs (NSE, Nippon India ETF series) — benchmark NIFTYBEES.NS
+IN_SECTOR_ETFS: Dict[str, str] = {
+    "BANKBEES.NS":   "Banking",
+    "ITBEES.NS":     "IT / Technology",
+    "PSUBNKBEES.NS": "PSU Banks",
+    "PHARMABEES.NS": "Pharma & Healthcare",
+    "AUTOBEES.NS":   "Auto",
+    "INFRABEES.NS":  "Infrastructure",
+    "CONSUMBEES.NS": "FMCG / Consumer",
+    "MOM100.NS":     "Momentum 100",
+}
+
+# Per-market config: (etf_dict, benchmark)
+MARKET_CONFIG: Dict[str, tuple] = {
+    "US": (SECTOR_ETFS, "SPY"),
+    "DE": (DE_SECTOR_ETFS, "EXS1.DE"),
+    "IN": (IN_SECTOR_ETFS, "NIFTYBEES.NS"),
+}
+
+BENCHMARK = "SPY"  # kept for backward compatibility
 
 # Periods to score (days)
 PERIODS = {
@@ -72,21 +106,29 @@ class SectorRotation:
             return np.nan
         return (series.iloc[-1] / series.iloc[-days - 1] - 1) * 100
 
-    def compute_rankings(self) -> pd.DataFrame:
+    def compute_rankings(self, market: str = "US") -> pd.DataFrame:
         """
         Fetch data and compute relative-strength rankings.
         Returns a DataFrame ranked best → worst sector.
+
+        Parameters
+        ----------
+        market : "US" | "DE" | "IN"  (default "US")
         """
-        all_tickers = list(SECTOR_ETFS.keys()) + [BENCHMARK]
+        etf_dict, benchmark = MARKET_CONFIG.get(market, (SECTOR_ETFS, BENCHMARK))
+        all_tickers = list(etf_dict.keys()) + [benchmark]
         prices = self._fetch(all_tickers)
 
-        if BENCHMARK not in prices:
-            raise RuntimeError(f"Failed to fetch benchmark {BENCHMARK}")
+        if benchmark not in prices:
+            raise RuntimeError(
+                f"Failed to fetch benchmark {benchmark} for market {market}. "
+                "Check your internet connection or try again in a few minutes."
+            )
 
-        spy = prices[BENCHMARK]
+        spy = prices[benchmark]
 
         rows = []
-        for etf, sector_name in SECTOR_ETFS.items():
+        for etf, sector_name in etf_dict.items():
             if etf not in prices:
                 continue
 
@@ -191,9 +233,9 @@ class SectorRotation:
 
 
 # ── Convenience function ───────────────────────────────────────────────────────
-def get_sector_rankings() -> pd.DataFrame:
+def get_sector_rankings(market: str = "US") -> pd.DataFrame:
     """Convenience: fetch and return sector rankings DataFrame."""
-    return SectorRotation().compute_rankings()
+    return SectorRotation().compute_rankings(market=market)
 
 
 if __name__ == "__main__":

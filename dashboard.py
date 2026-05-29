@@ -1,6 +1,9 @@
 """
-Global Swing Trading Dashboard
+Global Swing Trading Dashboard — Multi-Page Entry Point
 Multi-market Streamlit UI — US, Germany (XETRA), India (NSE).
+
+This file is the app entry point (streamlit run dashboard.py).
+All pages live in the pages/ directory and are auto-discovered by Streamlit.
 
 Pages:
   1.  🏠 Overview            account metrics, market status, quick scan
@@ -19,9 +22,11 @@ Pages:
   14. 🔄 Sector Rotation      US sector ETF relative strength rankings
   15. 🧪 Backtest Pro         walk-forward + Monte Carlo simulation
   16. 📓 Journal Analytics    MAE/MFE, regime & setup performance
-  17. ⚙️ Settings             config display
+  17. 🏆 Weekend Investing     MI momentum strategies
+  18. ⚙️ Settings             config display
 
 Launch:  streamlit run dashboard.py   |   python run_dashboard.py
+Each page can be opened in a separate browser tab via its own URL.
 """
 
 # ── Bootstrap: add all module subdirectories to sys.path ───────────────────────

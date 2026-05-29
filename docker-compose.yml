@@ -2,12 +2,22 @@
 # docker-compose.yml — Trading System
 #
 # Services:
-#   dashboard   → Streamlit UI  (http://localhost:8501)
-#   scheduler   → automated daily tasks (optional, start with --profile scheduler)
+#   dashboard          → Streamlit UI  (http://localhost:8501)
+#   scheduler          → automated daily tasks
+#   cloudflared-named  → Cloudflare named tunnel (permanent public URL)
+#   cloudflared-quick  → Cloudflare quick tunnel (temporary URL, no account)
 #
-# Quick start:
-#   docker compose up --build            # dashboard only
-#   docker compose --profile scheduler up --build  # dashboard + scheduler
+# Quick start (all services — profiles baked into .env):
+#   docker compose up -d
+#
+# Manual profile override:
+#   docker compose --profile scheduler --profile tunnel-auth up -d   # named tunnel
+#   docker compose --profile scheduler --profile tunnel up -d        # quick tunnel
+#
+# Switch between quick and named tunnel:
+#   Change COMPOSE_PROFILES in .env:
+#     COMPOSE_PROFILES=scheduler,tunnel        # quick (no token needed)
+#     COMPOSE_PROFILES=scheduler,tunnel-auth   # named (set CLOUDFLARE_TUNNEL_TOKEN)
 # ─────────────────────────────────────────────────────────────────────────────
 services:
 
@@ -62,6 +72,34 @@ services:
       - dashboard
     profiles:
       - scheduler
+
+  # ── Cloudflare Tunnel ───────────────────────────────────────────────────────
+  # Quick tunnel  (no account needed — temporary public URL, changes on restart)
+  #   docker compose --profile tunnel up
+  #
+  # Named tunnel (permanent URL — requires CLOUDFLARE_TUNNEL_TOKEN in .env)
+  #   docker compose --profile tunnel-auth up
+  cloudflared-quick:
+    image: cloudflare/cloudflared:latest
+    container_name: trading-cloudflared
+    command: tunnel --no-autoupdate run --url http://dashboard:8501
+    restart: unless-stopped
+    depends_on:
+      - dashboard
+    profiles:
+      - tunnel
+
+  cloudflared-named:
+    image: cloudflare/cloudflared:latest
+    container_name: trading-cloudflared-auth
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    restart: unless-stopped
+    depends_on:
+      - dashboard
+    profiles:
+      - tunnel-auth
 
 volumes:
   trading_data:

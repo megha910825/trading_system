@@ -18,16 +18,43 @@ import time
 from datetime import datetime
 import subprocess
 import sys
+import os
+
+# ── Log file ──────────────────────────────────────────────────────────────────
+_LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
+os.makedirs(_LOG_DIR, exist_ok=True)
+_LOG_FILE = os.path.join(_LOG_DIR, "scheduler.log")
+
+def _log(msg: str):
+    line = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}"
+    print(line)
+    with open(_LOG_FILE, "a") as f:
+        f.write(line + "\n")
 
 def update_universe():
-    """Run universe update"""
-    print(f"\n[{datetime.now()}] Running universe update...")
-    subprocess.run([sys.executable, "main.py", "quick-update"])
+    _log("universe update started")
+    try:
+        result = subprocess.run([sys.executable, "main.py", "quick-update"],
+                                capture_output=True, text=True, timeout=300)
+        if result.returncode == 0:
+            _log("universe update completed OK")
+        else:
+            _log(f"universe update ERROR: {result.stderr[:200]}")
+    except Exception as e:
+        _log(f"universe update ERROR: {e}")
 
 def generate_signals():
-    """Generate morning signals"""
-    print(f"\n[{datetime.now()}] Generating signals...")
-    subprocess.run([sys.executable, "main.py", "signals"])
+    _log("signals job started")
+    try:
+        result = subprocess.run([sys.executable, "main.py", "signals"],
+                                capture_output=True, text=True, timeout=300)
+        if result.returncode == 0:
+            _log("signals job completed OK")
+        else:
+            _log(f"signals job ERROR: {result.stderr[:200]}")
+    except Exception as e:
+        _log(f"signals job ERROR: {e}")
+
 
 def main():
     print("=" * 60)
